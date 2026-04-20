@@ -114,7 +114,42 @@ investments-app/
 
 ---
 
-## 7. Prochaines étapes (à construire)
+## 7. Guide de développement — Synchronisation Git
+
+> **Important** : Chaque fonctionnalité doit être développée dans une branche dédiée et tracée via le système de user stories.
+
+### Workflow pour une nouvelle story
+
+1. **Consulter Notion** : Prendre la story P1 avec le statut "À faire"
+2. **Créer une branche** :
+   ```bash
+   git checkout -b feature/us-XX-description-courte
+   ```
+3. **Développer** : Faire les commits avec la convention :
+   ```bash
+   git commit -m "feat(module): description courte [US-XX]"
+   ```
+4. **Finaliser** : Merger vers main avec `--no-ff` pour garder l'historique :
+   ```bash
+   git merge --no-ff feature/us-XX-description-courte
+   ```
+5. **Mettre à jour Notion** : Passer le statut à "À tester"
+
+### Convention de commits
+- Format : `<type>(<module>): <description> [US-ID]`
+- Types : feat, fix, refactor, style, test, docs, chore
+- Modules : auth, admin, dashboard, instruments, immobilier, revenus, autres
+
+**Exemples** :
+- `feat(admin): ajouter écran de profile utilisateur [US-20]`
+- `fix(immobilier): corriger calcul de rendement [US-14]`
+- `docs: documenter API endpoints [US-20]`
+
+Voir **CONTRIBUTING.md** pour la documentation complète.
+
+---
+
+## 8. Prochaines étapes (à construire)
 
 - Saisie des comptes (banque, courtier, assurance-vie, crypto, etc.)
 - Ajout des positions (titres, montants investis, valorisation)
