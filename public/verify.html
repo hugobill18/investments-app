@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vérification — Mes Investissements</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="page">
+  <div class="card">
+    <div class="logo">🔐</div>
+    <h1>Vérification</h1>
+    <p class="subtitle">Saisissez le code à 6 chiffres reçu par email.</p>
+
+    <div id="alert"></div>
+
+    <form id="verifyForm">
+      <div class="field">
+        <label for="code">Code de vérification</label>
+        <input type="text" id="code" class="code-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autofocus>
+      </div>
+
+      <label class="checkbox">
+        <input type="checkbox" id="trustDevice" checked>
+        <span>Faire confiance à cet appareil (pas de code la prochaine fois)</span>
+      </label>
+
+      <button class="primary" type="submit" id="submitBtn">Vérifier</button>
+    </form>
+
+    <a class="secondary-link" href="#" id="resendLink">Renvoyer un code</a>
+    <a class="secondary-link" href="/">← Revenir à la connexion</a>
+  </div>
+
+  <script>
+    const form = document.getElementById('verifyForm');
+    const alertBox = document.getElementById('alert');
+    const btn = document.getElementById('submitBtn');
+    const resend = document.getElementById('resendLink');
+
+    function showAlert(msg, type = 'error') {
+      alertBox.innerHTML = `<div class="alert ${type}">${msg}</div>`;
+    }
+
+    // Si le serveur tourne en mode console (pas d'email configuré), on prévient
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mocked') === '1') {
+      showAlert('Mode test : le code s\u2019affiche dans le terminal où tourne le serveur.', 'info');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!alertBox.querySelector('.alert.info')) alertBox.innerHTML = '';
+      btn.disabled = true;
+      btn.textContent = 'Vérification…';
+      try {
+        const res = await fetch('/api/verify-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: document.getElementById('code').value,
+            trustDevice: document.getElementById('trustDevice').checked
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showAlert(data.error || 'Code invalide.');
+          return;
+        }
+        window.location.href = '/dashboard';
+      } catch (err) {
+        showAlert('Impossible de contacter le serveur.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Vérifier';
+      }
+    });
+
+    resend.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        const res = await fetch('/api/resend-code', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) return showAlert(data.error || 'Impossible d\u2019envoyer un nouveau code.');
+        showAlert(data.mocked
+          ? 'Nouveau code généré (visible dans le terminal).'
+          : 'Nouveau code envoyé par email.', 'success');
+      } catch (err) {
+        showAlert('Impossible de contacter le serveur.');
+      }
+    });
+  </script>
+</body>
+</html>

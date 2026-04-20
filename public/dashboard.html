@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mes Investissements</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <!-- 🆕 APIs financières -->
+  <script src="/js/api-client.js"></script>
+  <script src="/js/api-integration.js"></script>
+</head>
+<body class="app-shell">
+  <div class="topbar">
+    <div class="brand">📈 Mes Investissements</div>
+    <div style="display:flex;align-items:center;gap:.75rem">
+      <span class="user" id="userEmail"></span>
+      <a id="adminLink" href="/admin" style="display:none;font-size:.8rem;color:#6366f1;text-decoration:none;font-weight:600;padding:.25rem .6rem;border:1px solid #6366f1;border-radius:6px">⚙️ Admin</a>
+      <button id="logoutBtn">Se déconnecter</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Navigation principale">
+      <nav>
+        <ul class="sidebar-menu">
+          <li><a href="#accueil" class="sidebar-link active" data-section="accueil"><span class="icon">🏠</span> Accueil</a></li>
+          <li class="sidebar-group">
+            <button type="button" class="sidebar-link sidebar-group-toggle expanded" data-group="investissements" aria-expanded="true">
+              <span class="icon">📊</span><span class="label">Investissements</span><span class="chevron">▾</span>
+            </button>
+            <ul class="sidebar-submenu" data-group-content="investissements">
+              <li><a href="#immobilier" class="sidebar-link sub" data-section="immobilier"><span class="icon">🏘️</span> Immobilier</a></li>
+              <li><a href="#financier"  class="sidebar-link sub" data-section="financier"><span class="icon">💹</span> Financier</a></li>
+            </ul>
+          </li>
+          <li><a href="#revenus"  class="sidebar-link" data-section="revenus"><span class="icon">💰</span> Revenus</a></li>
+          <li><a href="#depenses" class="sidebar-link" data-section="depenses"><span class="icon">🧾</span> Dépenses</a></li>
+          <li style="border-top: 1px solid #ddd; margin-top: 1rem; padding-top: 1rem;">
+            <a href="/admin" class="sidebar-link" title="Admin : voir les instruments financiers">
+              <span class="icon">🔧</span> Admin
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <!-- ==================== Accueil ==================== -->
+      <section class="view" id="view-accueil">
+        <h1>Bienvenue 👋</h1>
+        <p>Vue d'ensemble de votre patrimoine et de vos flux.</p>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Patrimoine total</div>
+            <div class="summary-value" id="sum-total-value">0 €</div>
+            <div class="summary-sub"  id="sum-total-sub">Immobilier + financier</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Cashflow immobilier</div>
+            <div class="summary-value" id="sum-immo-cashflow">0 € / an</div>
+            <div class="summary-sub"  id="sum-immo-cashflow-sub">0 € / mois</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Flux financier</div>
+            <div class="summary-value" id="sum-fin-flow">0 € / mois</div>
+            <div class="summary-sub"  id="sum-fin-flow-sub">Versements - retraits</div>
+          </div>
+          <div class="summary-card highlight">
+            <div class="summary-label">Cashflow global</div>
+            <div class="summary-value" id="sum-global-annual">0 € / an</div>
+            <div class="summary-sub"   id="sum-global-monthly">0 € / mois</div>
+          </div>
+        </div>
+
+        <!-- Graphiques -->
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Répartition du patrimoine</h3>
+            <p class="chart-sub">Valorisation immobilier vs financier</p>
+            <div class="chart-wrap"><canvas id="chartPatrimoine"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3>Cashflow annuel par bien</h3>
+            <p class="chart-sub">Positif = rentable, négatif = coût net</p>
+            <div class="chart-wrap"><canvas id="chartCashflow"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3>Composition financière</h3>
+            <p class="chart-sub">Par type de placement</p>
+            <div class="chart-wrap"><canvas id="chartFinancier"></canvas></div>
+          </div>
+        </div>
+
+        <div class="placeholder-box" id="accueil-empty" style="display:none">
+          <p style="margin:0;font-weight:600">Aucune donnée enregistrée pour l'instant</p>
+          <p style="margin:6px 0 0">Rendez-vous dans
+            <a href="#immobilier" class="nav-hint">Immobilier</a> ou
+            <a href="#financier"  class="nav-hint">Financier</a> pour commencer.
+          </p>
+        </div>
+      </section>
+
+      <!-- ==================== Immobilier ==================== -->
+      <section class="view hidden" id="view-immobilier">
+        <div class="view-header">
+          <div>
+            <h1>🏘️ Immobilier</h1>
+            <p>Vos biens et leur cashflow annuel.</p>
+          </div>
+          <button class="primary" id="addPropertyBtn">+ Ajouter un bien</button>
+        </div>
+        <div id="propertyList"></div>
+        <div class="placeholder-box" id="property-empty" style="display:none">
+          <p style="margin:0;font-weight:600">Aucun bien immobilier enregistré</p>
+          <p style="margin:6px 0 0">Cliquez sur « Ajouter un bien » pour commencer.</p>
+        </div>
+      </section>
+
+      <!-- ==================== Financier ==================== -->
+      <section class="view hidden" id="view-financier">
+        <div class="view-header">
+          <div>
+            <h1>💹 Financier</h1>
+            <p>Vos placements financiers (livrets, assurance-vie, comptes-titres, PEA…).</p>
+          </div>
+          <button class="primary" id="addAccountBtn">+ Ajouter un placement</button>
+        </div>
+        <div id="accountList"></div>
+        <div class="placeholder-box" id="account-empty" style="display:none">
+          <p style="margin:0;font-weight:600">Aucun placement enregistré</p>
+          <p style="margin:6px 0 0">Cliquez sur « Ajouter un placement » pour commencer.</p>
+        </div>
+      </section>
+
+      <!-- ==================== Revenus ==================== -->
+      <section class="view hidden" id="view-revenus">
+        <h1>💰 Revenus &amp; Fiscalité</h1>
+        <p>Votre foyer fiscal, vos revenus et votre impôt sur le revenu.</p>
+
+        <!-- Onglets -->
+        <div class="tab-bar" id="revenus-tabs">
+          <button class="tab-btn active" data-tab="foyer">🏠 Foyer fiscal</button>
+          <button class="tab-btn" data-tab="revenus-liste">💼 Revenus</button>
+          <button class="tab-btn" data-tab="ir">📊 Impôt estimé</button>
+        </div>
+
+        <!-- ── Onglet Foyer ── -->
+        <div class="tab-panel" id="tab-foyer">
+          <div class="form-section">
+            <h3>Situation du foyer</h3>
+            <form id="foyerForm">
+              <div class="field-row">
+                <div class="field">
+                  <label for="f-situation">Situation maritale</label>
+                  <select id="f-situation">
+                    <option value="celibataire">Célibataire</option>
+                    <option value="marie">Marié(e)</option>
+                    <option value="pacse">Pacsé(e)</option>
+                    <option value="divorce">Divorcé(e)</option>
+                    <option value="veuf">Veuf / Veuve</option>
+                    <option value="separe">Séparé(e)</option>
+                  </select>
+                </div>
+                <div class="field" id="field-parent-isole" style="display:none">
+                  <label>&nbsp;</label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="f-parent-isole">
+                    Parent isolé (demi-part supplémentaire)
+                  </label>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="f-enfants">Enfants à charge (entière)</label>
+                  <input type="number" id="f-enfants" min="0" max="20" step="1" value="0">
+                  <span class="field-hint">+0,5 part pour les 2 premiers, +1 part à partir du 3e</span>
+                </div>
+                <div class="field">
+                  <label for="f-altgarde">Enfants en garde alternée</label>
+                  <input type="number" id="f-altgarde" min="0" max="20" step="1" value="0">
+                  <span class="field-hint">+0,25 part par enfant</span>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="f-nb-parts" class="parts-label">Nombre de parts fiscales</label>
+                  <div id="f-nb-parts" class="parts-display">–</div>
+                  <span class="field-hint" id="f-parts-detail"></span>
+                </div>
+              </div>
+
+              <div id="foyerAlert"></div>
+              <div style="margin-top:1rem;display:flex;gap:.75rem;align-items:center">
+                <button type="submit" class="primary">Enregistrer le foyer</button>
+                <span id="foyerSaved" style="display:none;color:#10b981;font-size:.85rem">✓ Sauvegardé</span>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- ── Onglet Revenus ── -->
+        <div class="tab-panel hidden" id="tab-revenus-liste">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <h3 style="margin:0">Sources de revenus</h3>
+            <button class="primary" id="addRevenuBtn">+ Ajouter</button>
+          </div>
+
+          <!-- Revenus fonciers (lecture seule, issus des biens immo) -->
+          <div id="revenusFonciersCard" style="display:none" class="property-card" style="margin-bottom:.75rem">
+            <div class="property-header" style="cursor:default">
+              <div>
+                <div class="property-title">🏘️ Revenus fonciers (depuis vos biens immobiliers)</div>
+                <div class="property-sub" id="revenusFonciersSub">Calculés automatiquement</div>
+              </div>
+              <div class="property-cashflow">
+                <div class="big" id="revenusFonciersVal">–</div>
+                <div class="small muted">base imposable / an</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="revenusList"></div>
+          <div class="placeholder-box" id="revenus-empty" style="display:none">
+            <p style="margin:0;font-weight:600">Aucun revenu enregistré</p>
+            <p style="margin:6px 0 0">Cliquez sur « Ajouter » pour saisir vos salaires, retraites ou autres revenus.</p>
+          </div>
+        </div>
+
+        <!-- ── Onglet Impôt estimé ── -->
+        <div class="tab-panel hidden" id="tab-ir">
+          <div id="irLoading" style="text-align:center;padding:2rem;color:#6b7280">Calcul en cours…</div>
+          <div id="irResult" style="display:none">
+
+            <!-- Synthèse -->
+            <div class="summary-grid" style="margin-bottom:1.5rem">
+              <div class="summary-card highlight">
+                <div class="summary-label">Impôt net estimé</div>
+                <div class="summary-value" id="ir-impot-net">–</div>
+                <div class="summary-sub" id="ir-taux-effectif">–</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">TMI</div>
+                <div class="summary-value" id="ir-tmi">–</div>
+                <div class="summary-sub">Taux marginal d'imposition</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">Parts fiscales</div>
+                <div class="summary-value" id="ir-parts">–</div>
+                <div class="summary-sub" id="ir-situation">–</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">Revenu imposable</div>
+                <div class="summary-value" id="ir-rni">–</div>
+                <div class="summary-sub" id="ir-rni-sub">après abattement 10%</div>
+              </div>
+            </div>
+
+            <!-- Tableau des tranches -->
+            <div class="chart-card" style="margin-bottom:1.5rem">
+              <h3>Détail par tranche (barème progressif 2024)</h3>
+              <table class="cashflow-table" style="width:100%">
+                <thead>
+                  <tr>
+                    <th style="text-align:left">Tranche</th>
+                    <th style="text-align:right">Base imposable</th>
+                    <th style="text-align:right">Taux</th>
+                    <th style="text-align:right">Impôt</th>
+                  </tr>
+                </thead>
+                <tbody id="ir-tranches-body"></tbody>
+              </table>
+            </div>
+
+            <!-- Détail du calcul -->
+            <div class="chart-card">
+              <h3>Détail du calcul</h3>
+              <table class="cashflow-table" style="width:100%">
+                <tbody id="ir-detail-body"></tbody>
+              </table>
+              <p class="field-hint" style="margin-top:.75rem">
+                Calcul basé sur le barème IR 2024 (revenus 2023). Hors prélèvements sociaux sur les revenus du capital, hors crédits et réductions d'impôt.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="view hidden" id="view-depenses">
+        <h1>🧾 Dépenses</h1><p>Vos sorties d'argent.</p>
+        <div class="placeholder-box"><p style="margin:0;font-weight:600">Section à construire</p></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ==================== Modale : formulaire bien immobilier ==================== -->
+  <div class="modal-backdrop" id="modalProperty" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalPropertyTitle">Ajouter un bien</h2>
+        <button class="icon-btn" data-modal-close="modalProperty" aria-label="Fermer">✕</button>
+      </div>
+      <form id="propertyForm" class="modal-body">
+        <input type="hidden" id="p-id">
+        <div class="field">
+          <label for="p-label">Libellé du bien *</label>
+          <input type="text" id="p-label" required maxlength="120" placeholder="Ex : Appartement Paris 11e">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="p-type">Type de bien *</label>
+            <select id="p-type" required>
+              <option value="principale">Résidence principale</option>
+              <option value="secondaire">Résidence secondaire</option>
+              <option value="locative_nue">Location nue</option>
+              <option value="locative_meublee">Location meublée</option>
+              <option value="nue_propriete">Nue-propriété</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="p-value">Valeur estimée (€)</label>
+            <input type="number" id="p-value" min="0" step="1000" placeholder="0">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="p-credit">Mensualité crédit (€/mois)</label>
+            <input type="number" id="p-credit" min="0" step="10" placeholder="0">
+          </div>
+          <div class="field">
+            <label for="p-rent">Loyer perçu (€/mois)</label>
+            <input type="number" id="p-rent" min="0" step="10" placeholder="0">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="p-tax">Taxe foncière (€/an)</label>
+            <input type="number" id="p-tax" min="0" step="10" placeholder="0">
+          </div>
+          <div class="field">
+            <label for="p-condo">Charges copropriété (€/an)</label>
+            <input type="number" id="p-condo" min="0" step="10" placeholder="0">
+          </div>
+        </div>
+        <div class="field">
+          <label for="p-regime">Fiscalité des revenus locatifs</label>
+          <select id="p-regime">
+            <option value="aucune">Aucune (pas de revenus locatifs)</option>
+            <option value="micro_foncier">Micro-foncier (abattement 30%)</option>
+            <option value="reel_foncier">Réel foncier</option>
+            <option value="micro_bic">Micro-BIC / LMNP (abattement 50%)</option>
+            <option value="reel_bic">Réel BIC</option>
+          </select>
+          <p class="field-hint" style="margin-top:.35rem;font-size:.78rem;color:#6b7280">
+            La TMI est calculée automatiquement depuis votre <a href="#revenus" class="nav-hint" onclick="showSection('revenus')">foyer fiscal</a>.
+          </p>
+        </div>
+        <div class="field" id="field-deductible" style="display:none">
+          <label for="p-deductible">Charges déductibles au réel (€/an)
+            <span class="help">Travaux, intérêts d'emprunt, assurance PNO, etc.</span>
+          </label>
+          <input type="number" id="p-deductible" min="0" step="10" placeholder="0">
+        </div>
+        <div id="propertyAlert"></div>
+        <div class="modal-footer">
+          <button type="button" class="secondary" id="deletePropertyBtn" style="display:none">Supprimer</button>
+          <div class="spacer"></div>
+          <button type="button" class="secondary" data-modal-close="modalProperty">Annuler</button>
+          <button type="submit" class="primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== Modale : formulaire compte financier ==================== -->
+  <div class="modal-backdrop" id="modalAccount" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalAccountTitle">Ajouter un placement</h2>
+        <button class="icon-btn" data-modal-close="modalAccount" aria-label="Fermer">✕</button>
+      </div>
+      <form id="accountForm" class="modal-body">
+        <input type="hidden" id="a-id">
+        <div class="field">
+          <label for="a-label">Nom du placement *</label>
+          <input type="text" id="a-label" required maxlength="120" placeholder="Ex : Livret A, PEA Bourse Direct, AV Linxea">
+        </div>
+        <div class="field">
+          <label for="a-type">Type de placement *</label>
+          <select id="a-type" required>
+            <optgroup label="Épargne et fonds euros">
+              <option value="livret">Livret réglementé (A, LDDS, LEP)</option>
+              <option value="livret_banque">Livret bancaire</option>
+              <option value="assurance_vie_euro">Assurance-vie (fonds €)</option>
+              <option value="pel">PEL</option>
+              <option value="cel">CEL</option>
+              <option value="epargne_simple">Épargne / compte courant</option>
+            </optgroup>
+            <optgroup label="Portefeuilles de titres">
+              <option value="compte_titres">Compte-titres (CTO)</option>
+              <option value="pea">PEA</option>
+              <option value="assurance_vie_uc">Assurance-vie (UC)</option>
+              <option value="per">PER</option>
+              <option value="crypto">Crypto</option>
+            </optgroup>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+
+        <!-- Champs pour les types "simples" -->
+        <div id="a-simple-fields">
+          <div class="field-row">
+            <div class="field">
+              <label for="a-amount">Montant placé (€)</label>
+              <input type="number" id="a-amount" min="0" step="10" placeholder="0">
+            </div>
+            <div class="field">
+              <label for="a-rate">Rendement annuel (%)
+                <span class="help" id="a-rate-hint">Pré-rempli selon le type</span>
+              </label>
+              <input type="number" id="a-rate" min="0" max="20" step="0.1" placeholder="0">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="a-in">Versement mensuel (€/mois)</label>
+              <input type="number" id="a-in" min="0" step="10" placeholder="0">
+            </div>
+            <div class="field">
+              <label for="a-out">Retrait mensuel (€/mois)</label>
+              <input type="number" id="a-out" min="0" step="10" placeholder="0">
+            </div>
+          </div>
+        </div>
+
+        <!-- Indication pour les portefeuilles -->
+        <div id="a-portfolio-info" class="alert info" style="display:none">
+          Ce type de placement est un <strong>portefeuille de titres</strong>.
+          Une fois le placement créé, vous pourrez y ajouter vos positions
+          (titres, quantité, prix d'achat, prix actuel) directement depuis la carte.
+        </div>
+
+        <div id="accountAlert"></div>
+        <div class="modal-footer">
+          <button type="button" class="secondary" id="deleteAccountBtn" style="display:none">Supprimer</button>
+          <div class="spacer"></div>
+          <button type="button" class="secondary" data-modal-close="modalAccount">Annuler</button>
+          <button type="submit" class="primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== Modale : position ==================== -->
+  <div class="modal-backdrop" id="modalPosition" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalPositionTitle">Ajouter une position</h2>
+        <button class="icon-btn" data-modal-close="modalPosition" aria-label="Fermer">✕</button>
+      </div>
+      <form id="positionForm" class="modal-body">
+        <input type="hidden" id="pos-id">
+        <input type="hidden" id="pos-account-id">
+        <div class="field-row">
+          <div class="field">
+            <label for="pos-name">Nom *</label>
+            <input type="text" id="pos-name" required placeholder="Ex : Apple Inc., ETF World, Bitcoin">
+          </div>
+          <div class="field">
+            <label for="pos-ticker">Ticker
+              <span class="help">Yahoo Finance · .PA = Paris · -EUR = crypto en €</span>
+            </label>
+            <input type="text" id="pos-ticker" placeholder="Ex : AAPL, CW8.PA, BTC-EUR" list="tickersList">
+            <datalist id="tickersList"></datalist>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="pos-qty">Quantité *</label>
+            <input type="number" id="pos-qty" min="0" step="0.0001" required>
+          </div>
+          <div class="field" style="display: none;">
+            <label for="pos-currency">Devise</label>
+            <input type="text" id="pos-currency" value="EUR" maxlength="10">
+          </div>
+          <!-- La devise est déterminée automatiquement par le ticker (Yahoo Finance) -->
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="pos-buy">Prix d'achat moyen</label>
+            <input type="number" id="pos-buy" min="0" step="0.01" placeholder="0">
+          </div>
+          <div class="field">
+            <label for="pos-current">Prix actuel
+              <span class="help">Laissez vide si ticker renseigné : récupéré automatiquement</span>
+            </label>
+            <input type="number" id="pos-current" min="0" step="0.01" placeholder="0">
+          </div>
+        </div>
+        <div id="positionAlert"></div>
+        <div class="modal-footer">
+          <button type="button" class="secondary" id="deletePositionBtn" style="display:none">Supprimer</button>
+          <div class="spacer"></div>
+          <button type="button" class="secondary" data-modal-close="modalPosition">Annuler</button>
+          <button type="submit" class="primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== Modale : revenu ==================== -->
+  <div class="modal-backdrop" id="modalRevenu" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalRevenuTitle">Ajouter un revenu</h2>
+        <button class="icon-btn" data-modal-close="modalRevenu" aria-label="Fermer">✕</button>
+      </div>
+      <form id="revenuForm" class="modal-body">
+        <input type="hidden" id="rv-id">
+        <div class="field-row">
+          <div class="field">
+            <label for="rv-type">Type de revenu *</label>
+            <select id="rv-type" required>
+              <option value="salaire">Salaire / Traitements</option>
+              <option value="retraite">Pension de retraite</option>
+              <option value="chomage">Allocations chômage</option>
+              <option value="bic_location_meublee">BIC – Location meublée (saisie manuelle)</option>
+              <option value="autre">Autre revenu imposable</option>
+            </select>
+          </div>
+          <div class="field" id="field-rv-membre">
+            <label for="rv-membre">Déclarant</label>
+            <select id="rv-membre">
+              <option value="declarant1">Déclarant 1</option>
+              <option value="declarant2">Déclarant 2</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="rv-label">Libellé (optionnel)</label>
+          <input type="text" id="rv-label" maxlength="120" placeholder="Ex : Salaire ACME SA, Pension CNAV…">
+        </div>
+        <div class="field">
+          <label for="rv-montant">Montant brut annuel (€)</label>
+          <input type="number" id="rv-montant" min="0" step="100" placeholder="0" required>
+          <span class="field-hint">Revenu brut annuel avant abattement forfaitaire salarié</span>
+        </div>
+        <div id="revenuAlert"></div>
+        <div class="modal-footer">
+          <button type="button" class="secondary" id="deleteRevenuBtn" style="display:none">Supprimer</button>
+          <div class="spacer"></div>
+          <button type="button" class="secondary" data-modal-close="modalRevenu">Annuler</button>
+          <button type="submit" class="primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ==================== Utilitaires ====================
+    const fmtEur = (n, opts = {}) => {
+      const sign = opts.signed && n > 0 ? '+' : '';
+      return sign + Math.round(n).toLocaleString('fr-FR') + ' €';
+    };
+    const fmtPct = (n) => (n >= 0 ? '+' : '') + n.toFixed(1).replace('.', ',') + ' %';
+
+    const PROPERTY_TYPE_LABELS = {
+      principale: 'Résidence principale', secondaire: 'Résidence secondaire',
+      locative_nue: 'Location nue', locative_meublee: 'Location meublée',
+      nue_propriete: 'Nue-propriété'
+    };
+    const ACCOUNT_TYPE_LABELS = {
+      livret: 'Livret réglementé', livret_banque: 'Livret bancaire',
+      assurance_vie_euro: 'Assurance-vie (fonds €)', pel: 'PEL', cel: 'CEL',
+      epargne_simple: 'Épargne / compte', compte_titres: 'Compte-titres',
+      pea: 'PEA', assurance_vie_uc: 'Assurance-vie (UC)', per: 'PER',
+      crypto: 'Crypto', autre: 'Autre'
+    };
+    const PORTFOLIO_TYPES = new Set(['compte_titres','pea','assurance_vie_uc','per','crypto']);
+    const isPortfolio = t => PORTFOLIO_TYPES.has(t);
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+
+    async function api(url, opts = {}) {
+      const res = await fetch(url, {
+        headers: opts.body ? { 'Content-Type': 'application/json' } : {},
+        ...opts,
+        body: opts.body ? JSON.stringify(opts.body) : undefined
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('Erreur serveur (' + res.status + ')'));
+      return data;
+    }
+
+    function showToast(msg, type = 'info') {
+      let t = document.getElementById('toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'toast'; t.className = 'toast';
+        document.body.appendChild(t);
+        t.addEventListener('click', () => t.style.display = 'none');
+      }
+      t.textContent = msg;
+      t.className = 'toast ' + type;
+      t.style.display = 'block';
+    }
+
+    // ==================== Navigation ====================
+    const sidebarLinks = document.querySelectorAll('.sidebar-link[data-section]');
+    const views = document.querySelectorAll('.view');
+    function showSection(name) {
+      if (!document.getElementById('view-' + name)) name = 'accueil';
+      views.forEach(v => v.classList.toggle('hidden', v.id !== 'view-' + name));
+      sidebarLinks.forEach(l => l.classList.toggle('active', l.dataset.section === name));
+      if (history.replaceState) history.replaceState(null, '', '#' + name);
+    }
+    sidebarLinks.forEach(l => l.addEventListener('click', e => { e.preventDefault(); showSection(l.dataset.section); }));
+    document.querySelectorAll('.nav-hint').forEach(a =>
+      a.addEventListener('click', e => { e.preventDefault(); showSection(a.getAttribute('href').replace('#','')); }));
+    document.querySelectorAll('.sidebar-group-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const g = btn.dataset.group;
+        const sub = document.querySelector(`[data-group-content="${g}"]`);
+        const exp = btn.classList.toggle('expanded');
+        btn.setAttribute('aria-expanded', String(exp));
+        sub.classList.toggle('collapsed', !exp);
+      });
+    });
+
+    // ==================== Gestion des modales ====================
+    function openModalById(id)  { const m = document.getElementById(id); m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }
+    function closeModalById(id) { const m = document.getElementById(id); m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+    document.addEventListener('click', e => {
+      const closeId = e.target.dataset?.modalClose;
+      if (closeId) closeModalById(closeId);
+      if (e.target.classList?.contains('modal-backdrop')) e.target.classList.remove('open');
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+    });
+
+    // ==================== Auth + Logout ====================
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/';
+    });
+
+    (async () => {
+      let me;
+      try {
+        const res = await fetch('/api/me');
+        if (res.status === 401) { window.location.href = '/'; return; }
+        if (!res.ok) throw new Error('Auth failed');
+        me = await res.json();
+      } catch (e) { showToast('Serveur injoignable. Rafraîchissez la page.', 'error'); return; }
+
+      document.getElementById('userEmail').textContent = me.email;
+      if (me.isAdmin) document.getElementById('adminLink').style.display = 'inline-flex';
+      showSection((window.location.hash || '#accueil').replace('#', ''));
+
+      try {
+        await refreshAll();
+        // Charge les taux de référence (pour pré-remplir le formulaire livret)
+        try {
+          const rr = await api('/api/reference-rates');
+          referenceRates = rr.rates || {};
+        } catch {/* non bloquant */}
+        // Charge les tickers pour l'autocomplete (non bloquant)
+        try {
+          await loadTickersForAutocomplete();
+        } catch {/* non bloquant */}
+      } catch (e) {
+        console.error(e);
+        showToast('Certaines données n\u2019ont pas pu se charger. Redémarrez le serveur si vous venez de mettre à jour.', 'error');
+      }
+
+      // Rafraîchissement des cours en tâche de fond (non bloquant).
+      // Petit délai pour laisser l'UI s'afficher d'abord.
+      setTimeout(refreshQuotesInBackground, 600);
+    })();
+
+    // ==================== Rafraichissement global ====================
+    let propertiesCache = [];
+    let accountsCache = [];
+    let summaryCache = null;
+    let referenceRates = {};   // { livret: 2.4, pel: 1.75, ... }
+
+    async function refreshAll() {
+      const [summary, props, accts] = await Promise.all([
+        api('/api/summary'),
+        api('/api/properties'),
+        api('/api/financial-accounts')
+      ]);
+      summaryCache = summary;
+      propertiesCache = props;
+      accountsCache = accts;
+      renderSummary();
+      renderProperties();
+      renderAccounts();
+      renderCharts();
+    }
+
+    // Charger les tickers pour l'autocomplete
+    async function loadTickersForAutocomplete() {
+      try {
+        // Charger les tickers par défaut (récents + populaires)
+        const data = await api('/api/tickers/search');
+        const tickers = data.tickers || [];
+        const datalist = document.getElementById('tickersList');
+        if (!datalist) return;
+
+        datalist.innerHTML = tickers.map(t => `
+          <option value="${escapeHtml(t.ticker)}" label="${escapeHtml(t.name || '')} (${t.currency || '?'})"></option>
+        `).join('');
+
+        // Ajouter un listener de recherche dynamique sur le champ ticker
+        const tickerInput = document.getElementById('pos-ticker');
+        if (tickerInput) {
+          let searchTimeout;
+          tickerInput.addEventListener('input', async (e) => {
+            clearTimeout(searchTimeout);
+            const query = e.target.value.trim();
+
+            // Chercher en temps réel si l'utilisateur a tapé au moins 1 caractère
+            if (query.length >= 1) {
+              searchTimeout = setTimeout(async () => {
+                try {
+                  const result = await api(`/api/tickers/search?q=${encodeURIComponent(query)}`);
+                  const matches = result.tickers || [];
+                  datalist.innerHTML = matches.map(t => `
+                    <option value="${escapeHtml(t.ticker)}" label="${escapeHtml(t.name || '')} (${t.currency || '?'})"></option>
+                  `).join('');
+                } catch (err) {
+                  console.warn('Erreur lors de la recherche de tickers:', err);
+                }
+              }, 300); // Débounce 300ms
+            } else {
+              // Recharger les tickers par défaut si vide
+              loadTickersForAutocomplete();
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Impossible de charger les tickers pour autocomplete:', e);
+      }
+    }
+
+    // Formattage d'une date "il y a ..." pour le last_updated des positions
+    function fmtAgo(iso) {
+      if (!iso) return 'jamais';
+      const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+      if (diff < 60) return 'à l\u2019instant';
+      if (diff < 3600) return 'il y a ' + Math.floor(diff/60) + ' min';
+      if (diff < 86400) return 'il y a ' + Math.floor(diff/3600) + ' h';
+      return 'il y a ' + Math.floor(diff/86400) + ' j';
+    }
+
+    // Récupère les cours à jour côté serveur (Yahoo Finance) puis recharge la vue.
+    // Non bloquant : si ça échoue, on affiche juste un toast.
+    async function refreshQuotesInBackground() {
+      // On ne tente pas si l'utilisateur n'a aucune position portefeuille.
+      const hasPortfolios = accountsCache.some(a => a.metrics?.isPortfolio && a.positions?.length > 0);
+      if (!hasPortfolios) return;
+      try {
+        const r = await api('/api/refresh-quotes', { method: 'POST' });
+        if (r.refreshed > 0) {
+          await refreshAll();
+          const msg = `Cours mis à jour (${r.refreshed}${r.failed ? ' ok, ' + r.failed + ' échec(s)' : ''})`;
+          showToast(msg, r.failed ? 'info' : 'success');
+        } else if (r.failed > 0) {
+          showToast(`Impossible de récupérer les cours (${r.failed} échec(s))`, 'error');
+        }
+      } catch (e) {
+        showToast('Cours non récupérés : ' + e.message, 'error');
+      }
+    }
+
+    // ==================== Résumé Accueil ====================
+    function renderSummary() {
+      const { immobilier: im, financier: fi, patrimoine: pa } = summaryCache;
+
+      document.getElementById('sum-total-value').textContent = fmtEur(pa.total);
+      document.getElementById('sum-total-sub').textContent =
+        `Immo ${fmtEur(pa.immobilier)} · Fin ${fmtEur(pa.financier)}`;
+
+      const immoYear = im.netCashflow;
+      const immoEl = document.getElementById('sum-immo-cashflow');
+      immoEl.textContent = fmtEur(immoYear, { signed: true }) + ' / an';
+      immoEl.className = 'summary-value ' + (immoYear >= 0 ? 'positive' : 'negative');
+      document.getElementById('sum-immo-cashflow-sub').textContent = fmtEur(immoYear/12, { signed: true }) + ' / mois';
+
+      const finEl = document.getElementById('sum-fin-flow');
+      finEl.textContent = fmtEur(fi.monthlyNet, { signed: true }) + ' / mois';
+      finEl.className = 'summary-value ' + (fi.monthlyNet >= 0 ? 'positive' : 'negative');
+
+      const globalYear = im.netCashflow + fi.annualNet;
+      const gaEl = document.getElementById('sum-global-annual');
+      const gmEl = document.getElementById('sum-global-monthly');
+      gaEl.textContent = fmtEur(globalYear, { signed: true }) + ' / an';
+      gmEl.textContent = fmtEur(globalYear/12, { signed: true }) + ' / mois';
+      gaEl.className = 'summary-value ' + (globalYear >= 0 ? 'positive' : 'negative');
+      gmEl.className = 'summary-sub';
+
+      const empty = im.propertyCount === 0 && fi.accountCount === 0;
+      document.getElementById('accueil-empty').style.display = empty ? 'block' : 'none';
+    }
+
+    // ==================== Immobilier ====================
+    const collapsedProps = new Set();  // ids pliés
+
+    function propertyCardHTML(p) {
+      const c = p.cashflow;
+      const collapsed = collapsedProps.has(p.id);
+      const cls = c.netCashflow >= 0 ? 'positive' : 'negative';
+
+      const detail = `
+        <table class="cashflow-table">
+          <tbody>
+            <tr><td>Loyers perçus</td><td class="num positive">${fmtEur(c.annualRevenue)}</td></tr>
+            <tr><td>Crédit</td><td class="num negative">-${fmtEur(c.annualCredit)}</td></tr>
+            <tr><td>Taxe foncière</td><td class="num negative">-${fmtEur(c.annualPropertyTax)}</td></tr>
+            <tr><td>Charges copropriété</td><td class="num negative">-${fmtEur(c.annualCondoCharges)}</td></tr>
+            <tr class="subtotal">
+              <td>Cashflow avant impôt</td>
+              <td class="num ${c.grossCashflow >= 0 ? 'positive' : 'negative'}">${fmtEur(c.grossCashflow, {signed:true})}</td>
+            </tr>
+            <tr>
+              <td>Impôt estimé <span class="muted">(${escapeHtml(c.taxRegimeLabel)}, TMI ${c.marginalTaxRate}% + PS 17,2%)</span></td>
+              <td class="num negative">-${fmtEur(c.estimatedTax)}</td>
+            </tr>
+            <tr class="total">
+              <td>Cashflow net annuel</td>
+              <td class="num ${c.netCashflow >= 0 ? 'positive' : 'negative'}">${fmtEur(c.netCashflow, {signed:true})}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="property-actions">
+          <button class="secondary" data-action="edit-property">Modifier</button>
+          <button class="secondary" data-action="fiscal-sim" style="display:${p.rent_monthly > 0 ? 'inline-block' : 'none'}">📊 Simulation fiscale</button>
+        </div>
+        <div class="fiscal-sim-section" id="fiscal-sim-${p.id}" style="display:none"></div>`;
+
+      const collapsedSummary = `
+        <div class="mini-stats">
+          <div><span class="label">Revenus</span><span class="value positive">${fmtEur(c.annualRevenue)}</span></div>
+          <div><span class="label">Coûts</span><span class="value negative">-${fmtEur(c.annualExpenses + c.estimatedTax)}</span></div>
+        </div>`;
+
+      return `
+        <div class="property-card ${collapsed ? 'collapsed' : ''}" data-id="${p.id}">
+          <div class="property-header" data-action="toggle-property">
+            <div>
+              <div class="property-title">
+                <span class="chevron-toggle">${collapsed ? '▸' : '▾'}</span>
+                ${escapeHtml(p.label)}
+              </div>
+              <div class="property-sub">${PROPERTY_TYPE_LABELS[p.property_type] || p.property_type}${p.current_value ? ' · ' + fmtEur(p.current_value) : ''}</div>
+            </div>
+            <div class="property-cashflow ${cls}">
+              <div class="big">${fmtEur(c.netCashflow, {signed:true})} / an</div>
+              <div class="small">${fmtEur(c.monthlyNetCashflow, {signed:true})} / mois</div>
+            </div>
+          </div>
+          ${collapsed ? collapsedSummary : detail}
+        </div>`;
+    }
+
+    function renderProperties() {
+      const list = document.getElementById('propertyList');
+      list.innerHTML = propertiesCache.map(propertyCardHTML).join('');
+      document.getElementById('property-empty').style.display = propertiesCache.length === 0 ? 'block' : 'none';
+    }
+
+    // Délégation : clic sur header = toggle, clic sur bouton Modifier = édition
+    document.getElementById('propertyList').addEventListener('click', async (e) => {
+      const card = e.target.closest('.property-card');
+      if (!card) return;
+      const id = Number(card.dataset.id);
+      if (e.target.closest('[data-action="edit-property"]')) {
+        const p = propertiesCache.find(x => x.id === id);
+        openPropertyModal(p);
+      } else if (e.target.closest('[data-action="toggle-property"]')) {
+        if (collapsedProps.has(id)) collapsedProps.delete(id); else collapsedProps.add(id);
+        renderProperties();
+      } else if (e.target.closest('[data-action="fiscal-sim"]')) {
+        await toggleFiscalSim(id, e.target.closest('[data-action="fiscal-sim"]'));
+      }
+    });
+
+    // ── Simulation fiscale ──────────────────────────────────────────────────
+    const fiscalSimCache = {};  // { [id]: simulation | 'loading' | 'error' }
+
+    async function toggleFiscalSim(id, btn) {
+      const section = document.getElementById(`fiscal-sim-${id}`);
+      if (!section) return;
+
+      // Déjà visible → on masque
+      if (section.style.display === 'block') {
+        section.style.display = 'none';
+        btn.textContent = '📊 Simulation fiscale';
+        return;
+      }
+
+      btn.textContent = '⏳ Calcul…';
+      btn.disabled = true;
+
+      try {
+        if (!fiscalSimCache[id]) {
+          const data = await api(`/api/biens/${id}/fiscal-simulation`);
+          fiscalSimCache[id] = data;
+        }
+        section.innerHTML = renderFiscalSim(fiscalSimCache[id]);
+        section.style.display = 'block';
+        btn.textContent = '📊 Masquer simulation';
+      } catch (err) {
+        section.innerHTML = `<p class="alert-error" style="margin:.5rem 0">Erreur : ${escapeHtml(err.message)}</p>`;
+        section.style.display = 'block';
+        btn.textContent = '📊 Simulation fiscale';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderFiscalSim(sim) {
+      const { meta, micro_foncier: mf, reel_foncier: rf, lmnp_micro_bic: lmnp } = sim;
+      const regimes = [mf, rf, lmnp];
+
+      // Meilleur cashflow net parmi les régimes éligibles
+      const eligible = regimes.filter(r => r.eligible);
+      const bestNet  = eligible.length ? Math.max(...eligible.map(r => r.cashflowNet)) : null;
+
+      function col(r) {
+        const best = r.eligible && r.cashflowNet === bestNet;
+        const cls  = r.eligible ? (best ? 'fiscal-col best' : 'fiscal-col') : 'fiscal-col ineligible';
+        const netCls = r.cashflowNet >= 0 ? 'positive' : 'negative';
+
+        const warningHtml = r.warning
+          ? `<div class="fiscal-warning">⚠️ ${escapeHtml(r.warning)}</div>`
+          : '';
+
+        // Ligne déficit (régime réel seulement)
+        const deficitHtml = r.regime === 'reel_foncier' && r.deficitFoncier > 0 ? `
+          <tr><td>Déficit foncier</td><td class="num negative">-${fmtEur(r.deficitFoncier)}</td></tr>
+          <tr><td>Dont imputable RG (≤ ${fmtEur(10700)})</td><td class="num">${fmtEur(r.deficitImputable)}</td></tr>
+          ${r.deficitReporte > 0 ? `<tr><td>Report 10 ans</td><td class="num muted">${fmtEur(r.deficitReporte)}</td></tr>` : ''}
+        ` : '';
+
+        // Abattement (micro seulement)
+        const abattHtml = r.abattement !== undefined ? `
+          <tr><td>Abattement (${r.abattementPct}%)</td><td class="num muted">-${fmtEur(r.abattement)}</td></tr>
+        ` : '';
+
+        // Charges (réel)
+        const chargesHtml = r.chargesDeductibles !== undefined ? `
+          <tr><td>Charges déductibles</td><td class="num negative">-${fmtEur(r.chargesDeductibles)}</td></tr>
+        ` : '';
+
+        return `
+          <div class="${cls}">
+            ${best ? '<div class="fiscal-badge">✅ Optimal</div>' : ''}
+            ${!r.eligible ? '<div class="fiscal-badge ineligible-badge">🚫 Non accessible</div>' : ''}
+            <div class="fiscal-regime-title">${escapeHtml(r.label)}</div>
+            ${warningHtml}
+            <table class="cashflow-table">
+              <tbody>
+                <tr><td>Recettes</td><td class="num positive">${fmtEur(r.recettes)}</td></tr>
+                ${abattHtml}
+                ${chargesHtml}
+                ${deficitHtml}
+                <tr class="subtotal"><td>Base imposable</td><td class="num">${fmtEur(r.baseImposable)}</td></tr>
+                <tr><td>TMI appliquée</td><td class="num">${r.tmi} %</td></tr>
+                <tr><td>IR estimé</td><td class="num negative">-${fmtEur(r.ir)}</td></tr>
+                <tr><td>Prél. sociaux (17,2%)</td><td class="num negative">-${fmtEur(r.ps)}</td></tr>
+                <tr class="subtotal"><td>Total impôts</td><td class="num negative">-${fmtEur(r.impotTotal)}</td></tr>
+                <tr class="total">
+                  <td>Cashflow net / an</td>
+                  <td class="num ${netCls}">${fmtEur(r.cashflowNet, {signed:true})}</td>
+                </tr>
+                <tr>
+                  <td>Cashflow net / mois</td>
+                  <td class="num ${netCls}">${fmtEur(r.cashflowNetMensuel, {signed:true})}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>`;
+      }
+
+      return `
+        <div class="fiscal-sim-wrapper">
+          <div class="fiscal-sim-header">
+            <strong>🔎 Simulation fiscale</strong>
+            <span class="muted">Revenus : ${fmtEur(meta.recettesAnnuelles)}/an · Cashflow avant impôt : ${fmtEur(meta.cashflowAvantImpot, {signed:true})}/an · TMI de base : ${meta.tmiBase}%</span>
+          </div>
+          <div class="fiscal-cols">
+            ${regimes.map(col).join('')}
+          </div>
+          <p class="fiscal-note">⚠️ Simulation indicative. La TMI est calculée en fonction de votre foyer fiscal renseigné. Consultez un conseiller fiscal pour une analyse personnalisée.</p>
+        </div>`;
+    }
+
+    // Modale bien immobilier
+    document.getElementById('addPropertyBtn').addEventListener('click', () => openPropertyModal(null));
+
+    function openPropertyModal(p) {
+      const edit = !!p;
+      document.getElementById('modalPropertyTitle').textContent = edit ? 'Modifier le bien' : 'Ajouter un bien';
+      document.getElementById('deletePropertyBtn').style.display = edit ? 'inline-block' : 'none';
+      document.getElementById('propertyAlert').innerHTML = '';
+      document.getElementById('p-id').value       = p?.id ?? '';
+      document.getElementById('p-label').value    = p?.label ?? '';
+      document.getElementById('p-type').value     = p?.property_type ?? 'locative_nue';
+      document.getElementById('p-value').value    = p?.current_value ?? '';
+      document.getElementById('p-credit').value   = p?.credit_monthly_payment ?? '';
+      document.getElementById('p-rent').value     = p?.rent_monthly ?? '';
+      document.getElementById('p-tax').value      = p?.property_tax_annual ?? '';
+      document.getElementById('p-condo').value    = p?.condo_charges_annual ?? '';
+      document.getElementById('p-regime').value   = p?.tax_regime ?? 'micro_foncier';
+      document.getElementById('p-deductible').value = p?.deductible_charges_annual ?? '';
+      updatePropertyRegimeSuggestion(false);
+      togglePropertyDeductible();
+      openModalById('modalProperty');
+      setTimeout(() => document.getElementById('p-label').focus(), 50);
+    }
+
+    document.getElementById('p-type').addEventListener('change', () => updatePropertyRegimeSuggestion(true));
+    document.getElementById('p-regime').addEventListener('change', togglePropertyDeductible);
+    function updatePropertyRegimeSuggestion(force) {
+      const suggest = {
+        principale:'aucune', secondaire:'aucune', nue_propriete:'aucune',
+        locative_nue:'micro_foncier', locative_meublee:'micro_bic'
+      }[document.getElementById('p-type').value];
+      const sel = document.getElementById('p-regime');
+      if (force || !sel.value) sel.value = suggest;
+      togglePropertyDeductible();
+    }
+    function togglePropertyDeductible() {
+      const r = document.getElementById('p-regime').value;
+      document.getElementById('field-deductible').style.display = (r === 'reel_foncier' || r === 'reel_bic') ? 'block' : 'none';
+    }
+
+    document.getElementById('propertyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('p-id').value;
+      const payload = {
+        label: document.getElementById('p-label').value,
+        property_type: document.getElementById('p-type').value,
+        current_value: document.getElementById('p-value').value || 0,
+        credit_monthly_payment: document.getElementById('p-credit').value || 0,
+        rent_monthly: document.getElementById('p-rent').value || 0,
+        property_tax_annual: document.getElementById('p-tax').value || 0,
+        condo_charges_annual: document.getElementById('p-condo').value || 0,
+        tax_regime: document.getElementById('p-regime').value,
+        deductible_charges_annual: document.getElementById('p-deductible').value || 0
+      };
+      try {
+        if (id) await api(`/api/properties/${id}`, { method: 'PUT', body: payload });
+        else    await api('/api/properties',      { method: 'POST', body: payload });
+        closeModalById('modalProperty');
+        await refreshAll();
+      } catch (err) {
+        document.getElementById('propertyAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    document.getElementById('deletePropertyBtn').addEventListener('click', async () => {
+      const id = document.getElementById('p-id').value;
+      if (!id || !confirm('Supprimer ce bien ?')) return;
+      try {
+        await api(`/api/properties/${id}`, { method: 'DELETE' });
+        closeModalById('modalProperty');
+        await refreshAll();
+      } catch (err) {
+        document.getElementById('propertyAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    // ==================== Financier ====================
+    const collapsedAccts = new Set();
+
+    function positionRowHTML(pos) {
+      const qty = Number(pos.quantity), bp = Number(pos.buy_price), cp = Number(pos.current_price);
+      const value = qty * cp;
+      const gain  = qty * (cp - bp);
+      const pct   = (qty * bp) > 0 ? (gain / (qty * bp)) * 100 : 0;
+      const cls   = gain >= 0 ? 'positive' : 'negative';
+      return `
+        <tr data-pos-id="${pos.id}">
+          <td>
+            <div class="pos-name">${escapeHtml(pos.name)}</div>
+            ${pos.ticker ? `<div class="pos-ticker">${escapeHtml(pos.ticker)}</div>` : ''}
+          </td>
+          <td class="num">${qty.toLocaleString('fr-FR', {maximumFractionDigits:4})}</td>
+          <td class="num">${bp.toLocaleString('fr-FR', {maximumFractionDigits:2})}</td>
+          <td class="num">${cp.toLocaleString('fr-FR', {maximumFractionDigits:2})}</td>
+          <td class="num">${fmtEur(value)}</td>
+          <td class="num ${cls}">${fmtEur(gain, {signed:true})}<br><span class="small">${fmtPct(pct)}</span></td>
+          <td><button class="icon-btn" data-action="edit-position">✏️</button></td>
+        </tr>`;
+    }
+
+    function accountCardHTML(a) {
+      const m = a.metrics;
+      const collapsed = collapsedAccts.has(a.id);
+      const portfolio = m.isPortfolio;
+
+      const summaryLine = portfolio
+        ? `${m.typeLabel} · ${m.positionCount} position(s) · ${fmtEur(m.currentValue)} <span class="${m.unrealizedGain >= 0 ? 'positive' : 'negative'}">${fmtEur(m.unrealizedGain, {signed:true})} (${fmtPct(m.unrealizedGainPct)})</span>`
+        : `${m.typeLabel} · ${fmtEur(m.currentValue)}${m.annualRate ? ' · ' + m.annualRate.toFixed(2).replace('.',',') + '%/an' : ''}`;
+
+      const collapsedSummary = `
+        <div class="mini-stats">
+          <div><span class="label">Valeur</span><span class="value">${fmtEur(m.currentValue)}</span></div>
+          ${portfolio
+            ? `<div><span class="label">+/- value</span><span class="value ${m.unrealizedGain>=0?'positive':'negative'}">${fmtEur(m.unrealizedGain,{signed:true})}</span></div>`
+            : `<div><span class="label">Flux mensuel</span><span class="value ${m.monthlyNet>=0?'positive':'negative'}">${fmtEur(m.monthlyNet,{signed:true})}</span></div>`}
+        </div>`;
+
+      const detail = portfolio ? `
+        <table class="positions-table">
+          <thead>
+            <tr><th>Position</th><th>Qté</th><th>Prix achat</th><th>Prix actuel</th><th>Valeur</th><th>+/- value</th><th></th></tr>
+          </thead>
+          <tbody>${a.positions.map(positionRowHTML).join('') || '<tr><td colspan="7" class="muted" style="text-align:center">Aucune position pour l\u2019instant.</td></tr>'}</tbody>
+        </table>
+        <div class="property-actions">
+          <button class="secondary" data-action="add-position">+ Ajouter une position</button>
+          <button class="secondary" data-action="edit-account">Modifier le placement</button>
+        </div>
+      ` : `
+        <table class="cashflow-table">
+          <tbody>
+            <tr><td>Montant placé</td><td class="num">${fmtEur(m.currentValue)}</td></tr>
+            <tr><td>Versement mensuel</td><td class="num positive">+${fmtEur(m.monthlyIn)}</td></tr>
+            <tr><td>Retrait mensuel</td><td class="num negative">-${fmtEur(m.monthlyOut)}</td></tr>
+            <tr class="subtotal">
+              <td>Flux net mensuel</td>
+              <td class="num ${m.monthlyNet >= 0 ? 'positive' : 'negative'}">${fmtEur(m.monthlyNet, {signed:true})}</td>
+            </tr>
+            ${m.annualRate ? `<tr><td>Rendement annuel estimé (${m.annualRate.toFixed(2).replace('.',',')} %)</td><td class="num positive">${fmtEur(m.estimatedAnnualReturn, {signed:true})}</td></tr>` : ''}
+          </tbody>
+        </table>
+        <div class="property-actions">
+          <button class="secondary" data-action="edit-account">Modifier</button>
+        </div>
+      `;
+
+      return `
+        <div class="property-card ${collapsed ? 'collapsed' : ''}" data-account-id="${a.id}">
+          <div class="property-header" data-action="toggle-account">
+            <div>
+              <div class="property-title">
+                <span class="chevron-toggle">${collapsed ? '▸' : '▾'}</span>
+                ${escapeHtml(a.label)}
+              </div>
+              <div class="property-sub">${summaryLine}</div>
+            </div>
+            <div class="property-cashflow">
+              <div class="big">${fmtEur(m.currentValue)}</div>
+              ${portfolio
+                ? `<div class="small ${m.unrealizedGain >= 0 ? 'positive' : 'negative'}">${fmtEur(m.unrealizedGain,{signed:true})}</div>`
+                : `<div class="small ${m.monthlyNet >= 0 ? 'positive' : 'negative'}">${fmtEur(m.monthlyNet,{signed:true}) + ' / mois'}</div>`}
+            </div>
+          </div>
+          ${collapsed ? collapsedSummary : detail}
+        </div>`;
+    }
+
+    function renderAccounts() {
+      const list = document.getElementById('accountList');
+      // Collapse tous les comptes par défaut (pas le premier appel uniquement)
+      if (accountsCache.length > 0 && collapsedAccts.size === 0) {
+        accountsCache.forEach(a => collapsedAccts.add(a.id));
+      }
+      list.innerHTML = accountsCache.map(accountCardHTML).join('');
+      document.getElementById('account-empty').style.display = accountsCache.length === 0 ? 'block' : 'none';
+    }
+
+    document.getElementById('accountList').addEventListener('click', (e) => {
+      const card = e.target.closest('[data-account-id]');
+      if (!card) return;
+      const id = Number(card.dataset.accountId);
+      const account = accountsCache.find(x => x.id === id);
+      if (!account) return;
+
+      if (e.target.closest('[data-action="edit-account"]')) openAccountModal(account);
+      else if (e.target.closest('[data-action="add-position"]')) openPositionModal(id, null);
+      else if (e.target.closest('[data-action="edit-position"]')) {
+        const row = e.target.closest('tr[data-pos-id]');
+        const pos = account.positions.find(p => p.id === Number(row.dataset.posId));
+        openPositionModal(id, pos);
+      } else if (e.target.closest('[data-action="toggle-account"]')) {
+        if (collapsedAccts.has(id)) collapsedAccts.delete(id); else collapsedAccts.add(id);
+        renderAccounts();
+      }
+    });
+
+    // Modale placement
+    document.getElementById('addAccountBtn').addEventListener('click', () => openAccountModal(null));
+    document.getElementById('a-type').addEventListener('change', () => {
+      updateAccountFormVisibility();
+      prefillRateFromType();
+    });
+
+    function updateAccountFormVisibility() {
+      const port = isPortfolio(document.getElementById('a-type').value);
+      document.getElementById('a-simple-fields').style.display    = port ? 'none' : 'block';
+      document.getElementById('a-portfolio-info').style.display   = port ? 'block' : 'none';
+    }
+
+    // Pré-remplit le taux quand on (re)choisit un type de livret, SEULEMENT si le
+    // champ est vide ou égal à l'ancien taux de référence — on ne veut pas écraser
+    // un taux personnalisé saisi par l'utilisateur.
+    let lastAppliedRate = null;
+    function prefillRateFromType() {
+      const type = document.getElementById('a-type').value;
+      const ref  = referenceRates[type];
+      const input = document.getElementById('a-rate');
+      const hint  = document.getElementById('a-rate-hint');
+      if (ref == null) {
+        if (hint) hint.textContent = 'Saisissez le taux annuel';
+        return;
+      }
+      const current = input.value.trim();
+      if (!current || Number(current) === lastAppliedRate) {
+        input.value = ref;
+        lastAppliedRate = ref;
+      }
+      if (hint) hint.textContent = `Référence : ${ref.toString().replace('.',',')} % (modifiable)`;
+    }
+
+    function openAccountModal(a) {
+      const edit = !!a;
+      document.getElementById('modalAccountTitle').textContent = edit ? 'Modifier le placement' : 'Ajouter un placement';
+      document.getElementById('deleteAccountBtn').style.display = edit ? 'inline-block' : 'none';
+      document.getElementById('accountAlert').innerHTML = '';
+      document.getElementById('a-id').value     = a?.id ?? '';
+      document.getElementById('a-label').value  = a?.label ?? '';
+      document.getElementById('a-type').value   = a?.account_type ?? 'livret';
+      document.getElementById('a-amount').value = a?.amount ?? '';
+      document.getElementById('a-rate').value   = a?.annual_rate ?? '';
+      document.getElementById('a-in').value     = a?.monthly_in ?? '';
+      document.getElementById('a-out').value    = a?.monthly_out ?? '';
+      updateAccountFormVisibility();
+      openModalById('modalAccount');
+      setTimeout(() => document.getElementById('a-label').focus(), 50);
+    }
+
+    document.getElementById('accountForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('a-id').value;
+      const type = document.getElementById('a-type').value;
+      const payload = {
+        label: document.getElementById('a-label').value,
+        account_type: type,
+        // Pour un portefeuille, le montant est calculé à partir des positions → on envoie 0
+        amount:       isPortfolio(type) ? 0 : (document.getElementById('a-amount').value || 0),
+        annual_rate:  isPortfolio(type) ? 0 : (document.getElementById('a-rate').value   || 0),
+        monthly_in:   isPortfolio(type) ? 0 : (document.getElementById('a-in').value     || 0),
+        monthly_out:  isPortfolio(type) ? 0 : (document.getElementById('a-out').value    || 0)
+      };
+      try {
+        if (id) await api(`/api/financial-accounts/${id}`, { method: 'PUT', body: payload });
+        else    await api('/api/financial-accounts',       { method: 'POST', body: payload });
+        closeModalById('modalAccount');
+        await refreshAll();
+      } catch (err) {
+        document.getElementById('accountAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
+      const id = document.getElementById('a-id').value;
+      if (!id || !confirm('Supprimer ce placement et toutes ses positions ?')) return;
+      try {
+        await api(`/api/financial-accounts/${id}`, { method: 'DELETE' });
+        closeModalById('modalAccount');
+        await refreshAll();
+      } catch (err) {
+        document.getElementById('accountAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    // Modale position
+    function openPositionModal(accountId, pos) {
+      const edit = !!pos;
+      document.getElementById('modalPositionTitle').textContent = edit ? 'Modifier la position' : 'Ajouter une position';
+      document.getElementById('deletePositionBtn').style.display = edit ? 'inline-block' : 'none';
+      document.getElementById('positionAlert').innerHTML = '';
+      document.getElementById('pos-account-id').value = accountId;
+      document.getElementById('pos-id').value      = pos?.id ?? '';
+      document.getElementById('pos-name').value    = pos?.name ?? '';
+      document.getElementById('pos-ticker').value  = pos?.ticker ?? '';
+      document.getElementById('pos-qty').value     = pos?.quantity ?? '';
+      document.getElementById('pos-buy').value     = pos?.buy_price ?? '';
+      document.getElementById('pos-current').value = pos?.current_price ?? '';
+      document.getElementById('pos-currency').value = pos?.currency ?? 'EUR';
+      openModalById('modalPosition');
+      setTimeout(() => document.getElementById('pos-name').focus(), 50);
+    }
+
+    document.getElementById('positionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('pos-id').value;
+      const accountId = document.getElementById('pos-account-id').value;
+      const payload = {
+        name:     document.getElementById('pos-name').value,
+        ticker:   document.getElementById('pos-ticker').value,
+        quantity: document.getElementById('pos-qty').value     || 0,
+        buy_price: document.getElementById('pos-buy').value    || 0,
+        current_price: document.getElementById('pos-current').value || 0,
+        currency: document.getElementById('pos-currency').value || 'EUR'
+      };
+      try {
+        if (id) await api(`/api/positions/${id}`, { method: 'PUT', body: payload });
+        else    await api(`/api/financial-accounts/${accountId}/positions`, { method: 'POST', body: payload });
+        closeModalById('modalPosition');
+        await refreshAll();
+      } catch (err) {
+        document.getElementById('positionAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    document.getElementById('deletePositionBtn').addEventListener('click', async () => {
+      const id = document.getElementById('pos-id').value;
+      if (!id || !confirm('Supprimer cette position ?')) return;
+      try {
+        await api(`/api/positions/${id}`, { method: 'DELETE' });
+        closeModalById('modalPosition');
+        await refreshAll();
+      } catch (err) {
+        document.getElementById('positionAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    // ==================== Graphiques (Chart.js) ====================
+    const charts = {};
+    const COLORS = ['#6366f1','#14b8a6','#f59e0b','#ec4899','#3b82f6','#84cc16','#f97316','#a855f7','#22c55e','#ef4444'];
+
+    function chartTextColor() {
+      // Suit le mode clair/sombre de l'OS
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? '#e2e8f0' : '#374151';
+    }
+
+    function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
+
+    function renderCharts() {
+      const { immobilier: im, financier: fi, patrimoine: pa } = summaryCache;
+      const txt = chartTextColor();
+
+      // 1) Répartition patrimoine
+      destroyChart('patrimoine');
+      charts.patrimoine = new Chart(document.getElementById('chartPatrimoine'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Immobilier', 'Financier'],
+          datasets: [{ data: [pa.immobilier, pa.financier], backgroundColor: [COLORS[0], COLORS[1]] }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: txt } },
+            tooltip: { callbacks: { label: (c) => c.label + ' : ' + fmtEur(c.parsed) } }
+          }
+        }
+      });
+
+      // 2) Cashflow par bien immobilier
+      destroyChart('cashflow');
+      const labels  = im.perProperty.map(p => p.label);
+      const values  = im.perProperty.map(p => p.annualCashflow);
+      const bgColors = values.map(v => v >= 0 ? '#10b981' : '#ef4444');
+      charts.cashflow = new Chart(document.getElementById('chartCashflow'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Cashflow annuel', data: values, backgroundColor: bgColors }]
+        },
+        options: {
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => fmtEur(c.parsed.x, {signed:true}) + ' / an' } }
+          },
+          scales: {
+            x: { ticks: { color: txt, callback: (v) => fmtEur(v, {signed:true}) } },
+            y: { ticks: { color: txt } }
+          }
+        }
+      });
+
+      // 3) Composition financière par type
+      destroyChart('financier');
+      const typeEntries = Object.entries(fi.byType).filter(([,v]) => v > 0);
+      charts.financier = new Chart(document.getElementById('chartFinancier'), {
+        type: 'doughnut',
+        data: {
+          labels: typeEntries.map(([k]) => ACCOUNT_TYPE_LABELS[k] || k),
+          datasets: [{ data: typeEntries.map(([,v]) => v), backgroundColor: COLORS.slice(0, typeEntries.length) }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: txt } },
+            tooltip: { callbacks: { label: (c) => c.label + ' : ' + fmtEur(c.parsed) } }
+          }
+        }
+      });
+    }
+
+    // Re-rend les graphiques si l'utilisateur change le thème de l'OS
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (summaryCache) renderCharts(); });
+
+    // ==================== REVENUS & FISCALITÉ ====================
+
+    let foyerCache   = null;   // { situation_maritale, nb_enfants, ... }
+    let revenusCache = [];     // [{ id, type_revenu, membre, label, montant_annuel }]
+    let impotCache   = null;   // résultat de /api/impot
+
+    // ── Onglets ──
+    const tabBtns   = document.querySelectorAll('#revenus-tabs .tab-btn');
+    const tabPanels = document.querySelectorAll('#view-revenus .tab-panel');
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset.tab;
+        tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+        tabPanels.forEach(p => p.classList.toggle('hidden', p.id !== 'tab-' + t));
+        if (t === 'ir') loadImpot();
+      });
+    });
+
+    // ── Helpers calcul parts (JS côté client, miroir de tax.js) ──
+    function calculerNbPartsClient(foyer) {
+      const nbEnfants   = Math.max(0, parseInt(foyer.nb_enfants || 0));
+      const nbAltGarde  = Math.max(0, parseInt(foyer.nb_enfants_altgarde || 0));
+      const isole       = !!foyer.parent_isole;
+      const situation   = String(foyer.situation_maritale || 'celibataire').toLowerCase();
+
+      let parts = (situation === 'marie' || situation === 'pacse') ? 2 : 1;
+      if (situation === 'veuf' && nbEnfants > 0) parts = 2;
+
+      let partsEnfants = 0;
+      if (nbEnfants >= 1) partsEnfants += 0.5;
+      if (nbEnfants >= 2) partsEnfants += 0.5;
+      if (nbEnfants >= 3) partsEnfants += (nbEnfants - 2) * 1.0;
+      partsEnfants += nbAltGarde * 0.25;
+      parts += partsEnfants;
+
+      const estIsole = ['celibataire', 'divorce', 'separe'].includes(situation)
+        || (situation === 'veuf' && nbEnfants === 0);
+      if (isole && estIsole && (nbEnfants > 0 || nbAltGarde > 0)) parts += 0.5;
+
+      return Math.round(parts * 4) / 4;
+    }
+
+    // ── Formulaire Foyer ──
+    const foyerForm       = document.getElementById('foyerForm');
+    const fSituation      = document.getElementById('f-situation');
+    const fEnfants        = document.getElementById('f-enfants');
+    const fAltGarde       = document.getElementById('f-altgarde');
+    const fParentIsole    = document.getElementById('f-parent-isole');
+    const fNbParts        = document.getElementById('f-nb-parts');
+    const fPartsDetail    = document.getElementById('f-parts-detail');
+    const fieldParentIsole= document.getElementById('field-parent-isole');
+
+    function updateFoyerPreview() {
+      const situation = fSituation.value;
+      const isSingle = ['celibataire','divorce','separe','veuf'].includes(situation);
+      fieldParentIsole.style.display = isSingle ? 'block' : 'none';
+      if (!isSingle) fParentIsole.checked = false;
+
+      // Afficher/masquer déclarant 2 dans modale revenu selon situation maritale
+      const isCouple = situation === 'marie' || situation === 'pacse';
+      document.getElementById('field-rv-membre').style.display = isCouple ? 'block' : 'none';
+
+      const foyer = {
+        situation_maritale: situation,
+        nb_enfants: parseInt(fEnfants.value) || 0,
+        nb_enfants_altgarde: parseInt(fAltGarde.value) || 0,
+        parent_isole: fParentIsole.checked
+      };
+      const n = calculerNbPartsClient(foyer);
+      fNbParts.textContent = n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' part(s)';
+
+      const det = [];
+      if (situation === 'marie' || situation === 'pacse') det.push('Couple : 2 parts de base');
+      else det.push('Déclarant seul : 1 part de base');
+      const nbE = parseInt(fEnfants.value) || 0;
+      if (nbE >= 1) det.push(`${nbE} enfant(s) à charge : +${nbE <= 2 ? nbE * 0.5 : (2 * 0.5 + (nbE - 2) * 1).toFixed(1)} part(s)`);
+      const nbA = parseInt(fAltGarde.value) || 0;
+      if (nbA >= 1) det.push(`${nbA} enfant(s) garde alternée : +${(nbA * 0.25).toFixed(2)} part(s)`);
+      if (fParentIsole.checked && nbE > 0) det.push('Parent isolé : +0,5 part');
+      fPartsDetail.textContent = det.join(' · ');
+    }
+
+    fSituation.addEventListener('change', updateFoyerPreview);
+    fEnfants.addEventListener('input', updateFoyerPreview);
+    fAltGarde.addEventListener('input', updateFoyerPreview);
+    fParentIsole.addEventListener('change', updateFoyerPreview);
+
+    async function loadFoyer() {
+      try {
+        foyerCache = await api('/api/foyer');
+        fSituation.value          = foyerCache.situation_maritale || 'celibataire';
+        fEnfants.value            = foyerCache.nb_enfants || 0;
+        fAltGarde.value           = foyerCache.nb_enfants_altgarde || 0;
+        fParentIsole.checked      = !!foyerCache.parent_isole;
+        updateFoyerPreview();
+      } catch (e) {
+        console.warn('Foyer non chargé', e.message);
+      }
+    }
+
+    foyerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        situation_maritale:   fSituation.value,
+        nb_enfants:           parseInt(fEnfants.value) || 0,
+        nb_enfants_altgarde:  parseInt(fAltGarde.value) || 0,
+        parent_isole:         fParentIsole.checked,
+        nb_personnes_charge:  0
+      };
+      try {
+        foyerCache = await api('/api/foyer', { method: 'PUT', body: payload });
+        document.getElementById('foyerAlert').innerHTML = '';
+        const saved = document.getElementById('foyerSaved');
+        saved.style.display = 'inline';
+        setTimeout(() => { saved.style.display = 'none'; }, 2500);
+        impotCache = null; // invalider le cache IR
+        updateFoyerPreview();
+      } catch (err) {
+        document.getElementById('foyerAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    // ── Liste des revenus ──
+    const TYPE_REVENU_LABELS = {
+      salaire: 'Salaire / Traitements',
+      retraite: 'Retraite',
+      chomage: 'Allocations chômage',
+      bic_location_meublee: 'BIC – Location meublée',
+      autre: 'Autre revenu imposable'
+    };
+    const MEMBRE_LABELS = { declarant1: 'Déclarant 1', declarant2: 'Déclarant 2' };
+
+    function revenuCardHTML(r) {
+      return `
+        <div class="property-card" data-revenu-id="${r.id}" style="margin-bottom:.5rem">
+          <div class="property-header" style="cursor:default">
+            <div>
+              <div class="property-title">${escapeHtml(r.label || TYPE_REVENU_LABELS[r.type_revenu] || r.type_revenu)}</div>
+              <div class="property-sub">${TYPE_REVENU_LABELS[r.type_revenu] || r.type_revenu} · ${MEMBRE_LABELS[r.membre] || r.membre}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:.75rem">
+              <div class="property-cashflow">
+                <div class="big positive">${fmtEur(r.montant_annuel)}</div>
+                <div class="small muted">brut / an</div>
+              </div>
+              <button class="icon-btn" data-action="edit-revenu" title="Modifier">✏️</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function loadRevenus() {
+      try {
+        revenusCache = await api('/api/revenus');
+        renderRevenus();
+      } catch (e) {
+        console.warn('Revenus non chargés', e.message);
+      }
+    }
+
+    function renderRevenus() {
+      const list = document.getElementById('revenusList');
+      list.innerHTML = revenusCache.map(revenuCardHTML).join('');
+      document.getElementById('revenus-empty').style.display = revenusCache.length === 0 ? 'block' : 'none';
+
+      // Revenus fonciers issus des biens
+      let revFonciers = 0, revBIC = 0;
+      for (const p of propertiesCache) {
+        const c = p.cashflow;
+        if (['micro_foncier', 'reel_foncier'].includes(p.tax_regime)) revFonciers += c.taxableBase || 0;
+        else if (['micro_bic', 'reel_bic'].includes(p.tax_regime)) revBIC += c.taxableBase || 0;
+      }
+      const totalImmo = revFonciers + revBIC;
+      const fCard = document.getElementById('revenusFonciersCard');
+      const fVal  = document.getElementById('revenusFonciersVal');
+      const fSub  = document.getElementById('revenusFonciersSub');
+      fCard.style.display = totalImmo > 0 ? 'block' : 'none';
+      fVal.textContent  = fmtEur(totalImmo);
+      fSub.textContent  = `Revenus fonciers ${fmtEur(revFonciers)} + BIC ${fmtEur(revBIC)} (base imposable calculée depuis vos biens)`;
+    }
+
+    document.getElementById('revenusList').addEventListener('click', (e) => {
+      const card = e.target.closest('[data-revenu-id]');
+      if (!card) return;
+      if (e.target.closest('[data-action="edit-revenu"]')) {
+        const r = revenusCache.find(x => x.id === Number(card.dataset.revenuId));
+        openRevenuModal(r);
+      }
+    });
+
+    document.getElementById('addRevenuBtn').addEventListener('click', () => openRevenuModal(null));
+
+    function openRevenuModal(r) {
+      const edit = !!r;
+      document.getElementById('modalRevenuTitle').textContent = edit ? 'Modifier le revenu' : 'Ajouter un revenu';
+      document.getElementById('deleteRevenuBtn').style.display = edit ? 'inline-block' : 'none';
+      document.getElementById('revenuAlert').innerHTML = '';
+      document.getElementById('rv-id').value     = r?.id ?? '';
+      document.getElementById('rv-type').value   = r?.type_revenu ?? 'salaire';
+      document.getElementById('rv-membre').value = r?.membre ?? 'declarant1';
+      document.getElementById('rv-label').value  = r?.label ?? '';
+      document.getElementById('rv-montant').value = r?.montant_annuel ?? '';
+
+      // Masquer déclarant 2 si célibataire
+      const isCouple = fSituation && (fSituation.value === 'marie' || fSituation.value === 'pacse');
+      document.getElementById('field-rv-membre').style.display = isCouple ? 'block' : 'none';
+
+      openModalById('modalRevenu');
+      setTimeout(() => document.getElementById('rv-montant').focus(), 50);
+    }
+
+    document.getElementById('revenuForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('rv-id').value;
+      const payload = {
+        type_revenu:    document.getElementById('rv-type').value,
+        membre:         document.getElementById('rv-membre').value,
+        label:          document.getElementById('rv-label').value,
+        montant_annuel: parseFloat(document.getElementById('rv-montant').value) || 0
+      };
+      try {
+        if (id) await api(`/api/revenus/${id}`, { method: 'PUT', body: payload });
+        else    await api('/api/revenus',        { method: 'POST', body: payload });
+        closeModalById('modalRevenu');
+        impotCache = null;
+        await loadRevenus();
+      } catch (err) {
+        document.getElementById('revenuAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    document.getElementById('deleteRevenuBtn').addEventListener('click', async () => {
+      const id = document.getElementById('rv-id').value;
+      if (!id || !confirm('Supprimer ce revenu ?')) return;
+      try {
+        await api(`/api/revenus/${id}`, { method: 'DELETE' });
+        closeModalById('modalRevenu');
+        impotCache = null;
+        await loadRevenus();
+      } catch (err) {
+        document.getElementById('revenuAlert').innerHTML = `<div class="alert error">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    // ── Calcul impôt ──
+    async function loadImpot() {
+      if (impotCache) { renderImpot(impotCache); return; }
+      document.getElementById('irLoading').style.display = 'block';
+      document.getElementById('irResult').style.display  = 'none';
+      try {
+        impotCache = await api('/api/impot');
+        renderImpot(impotCache);
+      } catch (e) {
+        document.getElementById('irLoading').textContent = 'Erreur : ' + e.message;
+      }
+    }
+
+    function renderImpot(d) {
+      document.getElementById('irLoading').style.display = 'none';
+      document.getElementById('irResult').style.display  = 'block';
+
+      document.getElementById('ir-impot-net').textContent   = fmtEur(d.impotNet);
+      document.getElementById('ir-taux-effectif').textContent =
+        `Taux effectif : ${(d.tauxEffectif * 100).toFixed(1).replace('.',',')} %`;
+      document.getElementById('ir-tmi').textContent          = `${d.tmiPct} %`;
+      document.getElementById('ir-parts').textContent        = d.nbParts.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      document.getElementById('ir-situation').textContent    =
+        { celibataire:'Célibataire', marie:'Marié(e)', pacse:'Pacsé(e)',
+          divorce:'Divorcé(e)', veuf:'Veuf/Veuve', separe:'Séparé(e)' }[d.foyer?.situation_maritale] || '';
+      document.getElementById('ir-rni').textContent          = fmtEur(d.revenuImposable);
+      document.getElementById('ir-rni-sub').textContent      =
+        `Revenu brut ${fmtEur(d.revenuBrut)} − abattement salarié ${fmtEur(d.abattementSalarie)}`;
+
+      // Tranches
+      const tbody = document.getElementById('ir-tranches-body');
+      tbody.innerHTML = d.tranches.map(t => `
+        <tr>
+          <td>${t.de.toLocaleString('fr-FR')} € – ${t.a !== null ? t.a.toLocaleString('fr-FR') + ' €' : 'et +'}</td>
+          <td class="num">${fmtEur(t.base)}</td>
+          <td class="num">${(t.taux * 100).toFixed(0)} %</td>
+          <td class="num ${t.impot > 0 ? '' : 'muted'}">${fmtEur(t.impot)}</td>
+        </tr>
+      `).join('');
+
+      // Détail
+      const detail = document.getElementById('ir-detail-body');
+      const rows = [
+        ['Salaires bruts',                    fmtEur(d.salairesTotaux)],
+        ['Abattement forfaitaire salarié 10%', '−' + fmtEur(d.abattementSalarie)],
+        d.revenusFonciers ? ['Revenus fonciers imposables', fmtEur(d.revenusFonciers)] : null,
+        d.revenusBIC      ? ['Revenus BIC imposables',      fmtEur(d.revenusBIC)]      : null,
+        ['Revenu net imposable',               fmtEur(d.revenuImposable), 'subtotal'],
+        ['Quotient familial (' + d.nbParts + ' part(s))', fmtEur(d.revenuParPart) + ' / part'],
+        ['Impôt brut',                         fmtEur(d.impotBrut)],
+        d.decote ? ['Décote',                  '−' + fmtEur(d.decote)] : null,
+        ['Impôt net estimé',                   fmtEur(d.impotNet), 'total'],
+      ].filter(Boolean);
+      detail.innerHTML = rows.map(([label, val, cls]) =>
+        `<tr class="${cls||''}"><td>${label}</td><td class="num">${val}</td></tr>`
+      ).join('');
+    }
+
+    // ── Chargement initial de la section Revenus ──
+    // Déclenché à la première navigation vers #revenus
+    let revenusLoaded = false;
+    const origShowSection = showSection;
+    // Override showSection pour charger les données Revenus à la première visite
+    const _origShowSection = window.showSection;
+    function showSection(name) {
+      views.forEach(v => v.classList.toggle('hidden', v.id !== 'view-' + name));
+      sidebarLinks.forEach(l => l.classList.toggle('active', l.dataset.section === name));
+      if (history.replaceState) history.replaceState(null, '', '#' + name);
+      if (name === 'revenus' && !revenusLoaded) {
+        revenusLoaded = true;
+        loadFoyer();
+        loadRevenus();
+      }
+    }
+    // Ré-attacher les écouteurs sidebar (ils pointaient vers l'ancienne showSection)
+    sidebarLinks.forEach(l => {
+      l.replaceWith(l.cloneNode(true)); // clone pour retirer les anciens listeners
+    });
+    document.querySelectorAll('.sidebar-link[data-section]').forEach(l => {
+      l.addEventListener('click', e => { e.preventDefault(); showSection(l.dataset.section); });
+    });
+    document.querySelectorAll('.nav-hint').forEach(a => {
+      a.addEventListener('click', e => { e.preventDefault(); showSection(a.getAttribute('href').replace('#','')); });
+    });
+  </script>
+</body>
+</html>

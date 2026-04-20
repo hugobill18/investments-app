@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Créer un compte — Mes Investissements</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="page">
+  <div class="card">
+    <div class="logo">📈</div>
+    <h1>Créer un compte</h1>
+    <p class="subtitle">Un code de vérification vous sera envoyé par email.</p>
+
+    <div id="alert"></div>
+
+    <form id="registerForm">
+      <div class="field">
+        <label for="email">Adresse email</label>
+        <input type="email" id="email" required autocomplete="email" autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" required minlength="8" autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label for="password2">Confirmer le mot de passe</label>
+        <input type="password" id="password2" required minlength="8" autocomplete="new-password">
+      </div>
+      <button class="primary" type="submit" id="submitBtn">Créer mon compte</button>
+    </form>
+
+    <a class="secondary-link" href="/">J'ai déjà un compte</a>
+  </div>
+
+  <script>
+    const form = document.getElementById('registerForm');
+    const alertBox = document.getElementById('alert');
+    const btn = document.getElementById('submitBtn');
+
+    function showAlert(msg, type = 'error') {
+      alertBox.innerHTML = `<div class="alert ${type}">${msg}</div>`;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertBox.innerHTML = '';
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const password2 = document.getElementById('password2').value;
+
+      if (password !== password2) {
+        showAlert('Les mots de passe ne correspondent pas.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Création…';
+      try {
+        const res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showAlert(data.error || 'Erreur lors de la création du compte.');
+          return;
+        }
+        window.location.href = '/verify.html';
+      } catch (err) {
+        showAlert('Impossible de contacter le serveur.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Créer mon compte';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Instruments Financiers</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      padding: 30px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      color: #111;
+    }
+
+    .header-info {
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .header-info p {
+      color: #666;
+      margin-bottom: 5px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    thead {
+      background: #f9f9f9;
+      border-bottom: 2px solid #ddd;
+    }
+
+    th {
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #555;
+      font-size: 0.9rem;
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+    }
+
+    tr:hover {
+      background: #fafafa;
+    }
+
+    .ticker {
+      font-weight: 600;
+      color: #4f46e5;
+      font-family: monospace;
+    }
+
+    .currency {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 500;
+      font-size: 0.85rem;
+    }
+
+    .price {
+      font-family: monospace;
+      text-align: right;
+    }
+
+    .count, .qty {
+      text-align: center;
+      color: #666;
+    }
+
+    .last-updated {
+      font-size: 0.85rem;
+      color: #999;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .error {
+      background: #fee;
+      color: #c33;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: #4f46e5;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: #f9f9f9;
+      padding: 15px;
+      border-radius: 6px;
+      border-left: 4px solid #4f46e5;
+    }
+
+    .stat-card h3 {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-card .value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #111;
+    }
+
+    .name {
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    .tab-button {
+      background: #f0f0f0;
+      border: none;
+      padding: 10px 20px;
+      margin-right: 10px;
+      border-radius: 4px 4px 0 0;
+      cursor: pointer;
+      font-weight: 500;
+      color: #666;
+      transition: all 0.2s;
+    }
+
+    .tab-button:hover {
+      background: #e0e0e0;
+    }
+
+    .tab-button.active {
+      background: white;
+      color: #4f46e5;
+      border-bottom: 2px solid #4f46e5;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .category-group {
+      margin-bottom: 30px;
+    }
+
+    .category-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #4f46e5;
+      margin-bottom: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .ticker-item {
+      padding: 8px 12px;
+      background: #f9f9f9;
+      border-radius: 3px;
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .ticker-item .ticker {
+      font-weight: 600;
+      color: #4f46e5;
+      min-width: 100px;
+    }
+
+    .ticker-item .name-small {
+      flex: 1;
+      color: #666;
+      font-size: 0.9rem;
+      margin: 0 10px;
+    }
+
+    .ticker-item .currency-badge {
+      background: #e8e8ff;
+      color: #4f46e5;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/dashboard" class="back-link">← Retour au Dashboard</a>
+
+    <div class="header-info">
+      <h1>🔧 Admin — Instruments Financiers</h1>
+      <p>Vue d'ensemble des titres utilisés et disponibles sur Yahoo Finance</p>
+    </div>
+
+    <div style="margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px;">
+      <button class="tab-button active" data-tab="used">📊 Instruments Utilisés</button>
+      <button class="tab-button" data-tab="available">📚 Tickers Disponibles</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat-card">
+        <h3>Instruments</h3>
+        <div class="value" id="stat-count">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Positions Total</h3>
+        <div class="value" id="stat-positions">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Quantité Totale</h3>
+        <div class="value" id="stat-quantity">-</div>
+      </div>
+    </div>
+
+    <div id="error" class="error" style="display: none;"></div>
+
+    <!-- TAB 1: Instruments utilisés -->
+    <div id="tab-used" class="tab-content active">
+      <div id="loading-used" class="loading">
+        <p>Chargement des instruments utilisés...</p>
+      </div>
+
+      <table id="instrumentsTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Nom</th>
+          <th>Devise</th>
+          <th class="price">Dernier Prix</th>
+          <th class="count">Positions</th>
+          <th class="qty">Quantité</th>
+          <th>Dernière MAJ</th>
+        </tr>
+      </thead>
+      <tbody id="instrumentsBody"></tbody>
+    </table>
+    </div>
+
+    <!-- TAB 2: Tickers disponibles -->
+    <div id="tab-available" class="tab-content">
+      <div id="loading-available" class="loading">
+        <p>Chargement de la liste des tickers disponibles...</p>
+      </div>
+
+      <div id="availableTickersContainer" style="display: none;">
+        <p style="color: #666; margin-bottom: 20px;">
+          Voici tous les tickers disponibles sur Yahoo Finance. Les utilisateurs peuvent chercher parmi cette liste ou entrer un ticker personnalisé.
+        </p>
+        <div id="tickersByCategory"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Gestion des onglets
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+
+        // Masquer tous les onglets
+        document.querySelectorAll('.tab-content').forEach(el => {
+          el.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-button').forEach(el => {
+          el.classList.remove('active');
+        });
+
+        // Afficher l'onglet sélectionné
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        btn.classList.add('active');
+
+        // Charger les données si nécessaire
+        if (tab === 'used') loadInstruments();
+        else if (tab === 'available') loadAvailableTickers();
+      });
+    });
+
+    async function loadInstruments() {
+      try {
+        const res = await fetch('/api/admin/instruments');
+        if (!res.ok) throw new Error(await res.text());
+
+        const data = await res.json();
+        const instruments = data.instruments || [];
+
+        document.getElementById('loading-used').style.display = 'none';
+        document.getElementById('instrumentsTable').style.display = 'table';
+
+        // Stats
+        document.getElementById('stat-count').textContent = instruments.length;
+        const totalPositions = instruments.reduce((s, i) => s + (i.positionCount || 0), 0);
+        const totalQty = instruments.reduce((s, i) => s + (i.totalQuantity || 0), 0);
+        document.getElementById('stat-positions').textContent = totalPositions;
+        document.getElementById('stat-quantity').textContent = totalQty.toFixed(4);
+
+        // Table
+        const tbody = document.getElementById('instrumentsBody');
+        tbody.innerHTML = instruments.map(inst => {
+          const lastUpdated = inst.lastUpdated
+            ? new Date(inst.lastUpdated).toLocaleString('fr-FR')
+            : 'Jamais';
+
+          const price = inst.lastPrice ? inst.lastPrice.toFixed(2) : '-';
+
+          return `
+            <tr>
+              <td class="ticker">${escapeHtml(inst.ticker)}</td>
+              <td class="name">${escapeHtml(inst.name || '-')}</td>
+              <td><span class="currency">${escapeHtml(inst.currency || 'N/A')}</span></td>
+              <td class="price">${price}</td>
+              <td class="count">${inst.positionCount}</td>
+              <td class="qty">${(inst.totalQuantity || 0).toFixed(4)}</td>
+              <td class="last-updated">${lastUpdated}</td>
+            </tr>
+          `;
+        }).join('');
+
+      } catch (err) {
+        document.getElementById('loading-used').style.display = 'none';
+        const errorDiv = document.getElementById('error');
+        errorDiv.textContent = '❌ Erreur : ' + err.message;
+        errorDiv.style.display = 'block';
+      }
+    }
+
+    async function loadAvailableTickers() {
+      try {
+        const res = await fetch('/api/tickers/all');
+        if (!res.ok) throw new Error(await res.text());
+
+        const data = await res.json();
+        const tickers = data.tickers || [];
+
+        document.getElementById('loading-available').style.display = 'none';
+        document.getElementById('availableTickersContainer').style.display = 'block';
+
+        // Grouper par catégorie
+        const byCategory = {};
+        tickers.forEach(t => {
+          const cat = t.category || 'Autres';
+          if (!byCategory[cat]) byCategory[cat] = [];
+          byCategory[cat].push(t);
+        });
+
+        // Rendre par catégorie
+        const container = document.getElementById('tickersByCategory');
+        container.innerHTML = Object.keys(byCategory)
+          .sort()
+          .map(category => {
+            const items = byCategory[category];
+            return `
+              <div class="category-group">
+                <div class="category-title">${escapeHtml(category)} (${items.length})</div>
+                ${items.map(t => `
+                  <div class="ticker-item">
+                    <span class="ticker">${escapeHtml(t.ticker)}</span>
+                    <span class="name-small">${escapeHtml(t.name)}</span>
+                    <span class="currency-badge">${escapeHtml(t.currency)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          })
+          .join('');
+
+      } catch (err) {
+        document.getElementById('loading-available').style.display = 'none';
+        const errorDiv = document.getElementById('error');
+        errorDiv.textContent = '❌ Erreur : ' + err.message;
+        errorDiv.style.display = 'block';
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    loadInstruments();
+  </script>
+</body>
+</html>

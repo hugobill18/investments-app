@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion — Mes Investissements</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="page">
+  <div class="card">
+    <div class="logo">📈</div>
+    <h1>Bienvenue</h1>
+    <p class="subtitle">Connectez-vous pour gérer vos investissements.</p>
+
+    <div id="alert"></div>
+
+    <form id="loginForm" autocomplete="on">
+      <div class="field">
+        <label for="email">Adresse email</label>
+        <input type="email" id="email" name="email" required autocomplete="email" autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button class="primary" type="submit" id="submitBtn">Se connecter</button>
+    </form>
+
+    <a class="secondary-link" href="/register.html">Créer un compte</a>
+  </div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const alertBox = document.getElementById('alert');
+    const btn = document.getElementById('submitBtn');
+
+    function showAlert(msg, type = 'error') {
+      alertBox.innerHTML = `<div class="alert ${type}">${msg}</div>`;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertBox.innerHTML = '';
+      btn.disabled = true;
+      btn.textContent = 'Connexion…';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value
+          })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showAlert(data.error || 'Erreur lors de la connexion.');
+          return;
+        }
+
+        if (data.step === 'authenticated') {
+          // Appareil de confiance — connexion immédiate
+          window.location.href = '/dashboard';
+        } else if (data.step === 'code-sent') {
+          const url = new URL('/verify.html', window.location.origin);
+          if (data.mocked) url.searchParams.set('mocked', '1');
+          window.location.href = url.toString();
+        }
+      } catch (err) {
+        showAlert('Impossible de contacter le serveur.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Se connecter';
+      }
+    });
+  </script>
+</body>
+</html>

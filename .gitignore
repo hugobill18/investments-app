@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+fichier.env.json
+
+# Logs
+*.log
+
+# Database & cache
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/*-cache.json
+
+# macOS
+.DS_Store
+
+# macOS FUSE hidden files
+.fuse_hidden*
+
+# Misc
+*.tmp
