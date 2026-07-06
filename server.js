@@ -1148,6 +1148,12 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+// Interface iPhone (PWA) — mêmes API, protégée de la même façon
+app.get('/mobile', (req, res) => {
+  if (!req.session.userId) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'mobile.html'));
+});
+
 // API : Lister tous les instruments financiers utilisés (Admin only)
 app.get('/api/admin/instruments', requireAdmin, (req, res) => {
   const instruments = db.prepare(`

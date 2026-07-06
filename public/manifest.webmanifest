@@ -1,0 +1,15 @@
+{
+  "name": "Mes Investissements",
+  "short_name": "Patrimoine",
+  "description": "Gestion de patrimoine locale : placements, immobilier, projections, abonnements.",
+  "start_url": "/mobile",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#5856d6",
+  "lang": "fr",
+  "icons": [
+    { "src": "/icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
