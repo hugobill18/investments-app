@@ -137,11 +137,62 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_revenus_user ON revenus(user_id);
+
+  -- Abonnements récurrents détectés / saisis (module Dépenses)
+  -- Seuls les abonnements confirmés par l'utilisateur sont stockés :
+  -- les transactions bancaires importées ne sont JAMAIS persistées.
+  CREATE TABLE IF NOT EXISTS subscriptions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL,
+    label         TEXT    NOT NULL,
+    category      TEXT    NOT NULL DEFAULT 'autre',
+    periodicity   TEXT    NOT NULL DEFAULT 'mensuel',
+    -- 'mensuel' | 'trimestriel' | 'annuel'
+    amount        REAL    NOT NULL DEFAULT 0,
+    -- montant par échéance (selon periodicity)
+    monthly_cost  REAL    NOT NULL DEFAULT 0,
+    essential     INTEGER NOT NULL DEFAULT 1,
+    -- 0 = l'utilisateur juge cet abonnement dispensable (économie potentielle)
+    notes         TEXT    DEFAULT '',
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
+
+  -- Opportunités immobilières : annonces (Leboncoin, PAP, SeLoger…) simulées
+  -- et sauvegardées avec leurs hypothèses (JSON) pour comparaison.
+  CREATE TABLE IF NOT EXISTS property_opportunities (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    label      TEXT    NOT NULL,
+    url        TEXT    DEFAULT '',
+    inputs     TEXT    NOT NULL DEFAULT '{}',
+    -- hypothèses de simulation (JSON : prix, loyer, apport, taux…)
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_opportunities_user ON property_opportunities(user_id);
 `);
 
-const hasAdminCol = db.prepare("PRAGMA table_info(users)").all().some(c => c.name === 'is_admin');
-if (!hasAdminCol) {
-  db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
+// --- Migrations additives (colonnes ajoutées après coup) --------------------
+
+function addColumnIfMissing(table, column, ddl) {
+  const exists = db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === column);
+  if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
+
+addColumnIfMissing('users', 'is_admin', 'is_admin INTEGER NOT NULL DEFAULT 0');
+
+// Frais et ancienneté des placements (fiscalité et projections)
+addColumnIfMissing('financial_accounts', 'fees_entry_pct', 'fees_entry_pct REAL NOT NULL DEFAULT 0');
+addColumnIfMissing('financial_accounts', 'fees_mgmt_pct',  'fees_mgmt_pct REAL NOT NULL DEFAULT 0');
+addColumnIfMissing('financial_accounts', 'fees_exit_pct',  'fees_exit_pct REAL NOT NULL DEFAULT 0');
+addColumnIfMissing('financial_accounts', 'opened_year',    'opened_year INTEGER');
+
+// Année de naissance du déclarant 1 : sert à calculer la durée maximale
+// d'emprunt (fin de prêt à 70 ans) dans le simulateur immobilier.
+addColumnIfMissing('foyer_fiscal', 'birth_year', 'birth_year INTEGER');
 
 module.exports = db;

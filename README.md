@@ -6,7 +6,13 @@ en deux étapes (code email ou clef d'accès de l'appareil de confiance),
 et inscription.
 
 L'application tourne **entièrement sur votre Mac** — rien n'est envoyé sur
-Internet à part les codes de vérification par email (optionnel).
+Internet à part les codes de vérification par email (optionnel) et la
+récupération des cotations / historiques / actualités (Yahoo Finance).
+
+> **Nouveautés v2** : sécurisation renforcée, frais & fiscalité des placements,
+> projection patrimoniale multi-années, détection des abonnements depuis un
+> relevé bancaire CSV, simulateur d'opportunités immobilières (prêt jusqu'à
+> 70 ans, notaire, fiscalité). Voir **[EVOLUTIONS_V2.md](EVOLUTIONS_V2.md)**.
 
 ---
 

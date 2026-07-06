@@ -29,16 +29,24 @@ const { LIVRET_REFERENCE_RATES, LIVRET_REFERENCE_NOTE } = require('./rates');
 const apiProviders = require('./api-providers');
 const { KNOWN_TICKERS, searchTickers } = require('./api-providers/known-tickers');
 const setupApiRoutes = require('./api-routes');
+const setupV2Routes = require('./routes-v2');
 const { calculerIR, calculerNbParts } = require('./tax');
 const { simulerImpactFiscal } = require('./fiscal-simulator');
+const {
+  securityHeaders, createRateLimiter, sameOriginGuard, loadOrCreateSessionSecret
+} = require('./security');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+// Secret persistant : ne pas invalider les sessions à chaque redémarrage
+const SESSION_SECRET = loadOrCreateSessionSecret(path.join(__dirname, 'data'));
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 // --- Middlewares ---------------------------------------------------------
 
-app.use(express.json());
+app.disable('x-powered-by');
+app.use(securityHeaders);
+app.use(express.json({ limit: '3mb' }));       // 3 Mo : import de relevés CSV
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(session({
@@ -49,15 +57,34 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
+    secure: IS_PROD,               // HTTPS obligatoire en production
     maxAge: 1000 * 60 * 60 * 8 // 8 heures
   }
 }));
+
+// Protection CSRF : refuse les requêtes mutantes venant d'une autre origine
+app.use('/api', sameOriginGuard);
+
+// Anti brute-force sur les endpoints d'authentification
+const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, max: 20,
+  message: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.'
+});
+const codeLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, max: 10,
+  message: 'Trop de codes demandés ou essayés. Réessayez dans 15 minutes.'
+});
+app.use(['/api/login', '/api/register'], authLimiter);
+app.use(['/api/verify-code', '/api/resend-code'], codeLimiter);
 
 // Sert les fichiers statiques (HTML/CSS/JS) sauf /dashboard qui est protégé
 app.use(express.static(path.join(__dirname, 'public'), { index: 'index.html' }));
 
 // Enregistrer les nouvelles routes API financières (cache, cotations, taux)
 setupApiRoutes(app, db, requireAuth);
+
+// Routes v2 : projection, insights/news, abonnements, opportunités immo
+setupV2Routes(app, db, requireAuth);
 
 // --- Utilitaires ---------------------------------------------------------
 
@@ -213,6 +240,16 @@ app.post('/api/verify-code', (req, res) => {
     if (!/^\d{6}$/.test(code))
       return res.status(400).json({ error: 'Le code doit contenir 6 chiffres.' });
 
+    // Anti brute-force : 5 essais max par vérification en cours.
+    req.session.verifyAttempts = (req.session.verifyAttempts || 0) + 1;
+    if (req.session.verifyAttempts > 5) {
+      db.prepare('DELETE FROM login_codes WHERE user_id = ? AND used_at IS NULL').run(userId);
+      delete req.session.pendingUserId;
+      delete req.session.pendingPurpose;
+      delete req.session.verifyAttempts;
+      return res.status(429).json({ error: 'Trop d’essais. Recommencez la connexion.' });
+    }
+
     const row = db.prepare(`
       SELECT id FROM login_codes
        WHERE user_id = ? AND purpose = ? AND code_hash = ?
@@ -229,6 +266,7 @@ app.post('/api/verify-code', (req, res) => {
     req.session.email = user.email;
     delete req.session.pendingUserId;
     delete req.session.pendingPurpose;
+    delete req.session.verifyAttempts;
 
     // Option : enregistrer une clef d'accès pour cet appareil
     if (trustDevice) {
@@ -436,7 +474,8 @@ function validateAccountPayload(body) {
   const type = String(body.account_type || '').trim();
   if (!ALLOWED_ACCOUNT_TYPES.includes(type)) errors.push('Type de placement invalide.');
 
-  const nums = ['amount','monthly_in','monthly_out','annual_rate'];
+  const nums = ['amount','monthly_in','monthly_out','annual_rate',
+                'fees_entry_pct','fees_mgmt_pct','fees_exit_pct'];
   const data = { label, account_type: type };
   for (const k of nums) {
     const v = Number(body[k]);
@@ -445,6 +484,13 @@ function validateAccountPayload(body) {
     }
     data[k] = Number.isFinite(v) ? v : 0;
   }
+  // Les frais sont des pourcentages raisonnables (0 à 10%)
+  for (const k of ['fees_entry_pct','fees_mgmt_pct','fees_exit_pct']) {
+    if (data[k] < 0 || data[k] > 10) errors.push(`Frais invalides pour ${k} (0 à 10%).`);
+  }
+  // Année d'ouverture : sert au calcul de l'ancienneté fiscale (PEA, AV)
+  const oy = Number(body.opened_year);
+  data.opened_year = (Number.isFinite(oy) && oy >= 1950 && oy <= new Date().getFullYear()) ? Math.floor(oy) : null;
   data.notes = String(body.notes || '').slice(0, 1000);
   return { errors, data };
 }
@@ -499,8 +545,11 @@ app.post('/api/financial-accounts', requireAuth, (req, res) => {
   const { errors, data } = validateAccountPayload(req.body);
   if (errors.length) return res.status(400).json({ error: errors.join(' ') });
   const info = db.prepare(`
-    INSERT INTO financial_accounts (user_id, label, account_type, amount, monthly_in, monthly_out, annual_rate, notes)
-    VALUES (@user_id, @label, @account_type, @amount, @monthly_in, @monthly_out, @annual_rate, @notes)
+    INSERT INTO financial_accounts
+      (user_id, label, account_type, amount, monthly_in, monthly_out, annual_rate,
+       fees_entry_pct, fees_mgmt_pct, fees_exit_pct, opened_year, notes)
+    VALUES (@user_id, @label, @account_type, @amount, @monthly_in, @monthly_out, @annual_rate,
+            @fees_entry_pct, @fees_mgmt_pct, @fees_exit_pct, @opened_year, @notes)
   `).run({ user_id: req.session.userId, ...data });
   const row = db.prepare('SELECT * FROM financial_accounts WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json(accountWithDetails(row));
@@ -517,7 +566,10 @@ app.put('/api/financial-accounts/:id', requireAuth, (req, res) => {
     UPDATE financial_accounts SET
       label = @label, account_type = @account_type,
       amount = @amount, monthly_in = @monthly_in, monthly_out = @monthly_out,
-      annual_rate = @annual_rate, notes = @notes, updated_at = datetime('now')
+      annual_rate = @annual_rate,
+      fees_entry_pct = @fees_entry_pct, fees_mgmt_pct = @fees_mgmt_pct,
+      fees_exit_pct = @fees_exit_pct, opened_year = @opened_year,
+      notes = @notes, updated_at = datetime('now')
     WHERE id = @id
   `).run({ id: Number(req.params.id), ...data });
   const row = db.prepare('SELECT * FROM financial_accounts WHERE id = ?').get(req.params.id);
@@ -791,6 +843,11 @@ app.put('/api/foyer', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Situation maritale invalide.' });
   }
 
+  // Année de naissance : utilisée pour la durée maximale d'emprunt (70 ans)
+  const by = Number(req.body.birth_year);
+  const birthYear = (Number.isFinite(by) && by >= 1920 && by <= new Date().getFullYear() - 18)
+    ? Math.floor(by) : null;
+
   const data = {
     user_id: req.session.userId,
     situation_maritale: situation,
@@ -798,20 +855,22 @@ app.put('/api/foyer', requireAuth, (req, res) => {
     nb_enfants_altgarde: Math.max(0, Math.floor(Number(req.body.nb_enfants_altgarde) || 0)),
     parent_isole: req.body.parent_isole ? 1 : 0,
     nb_personnes_charge: Math.max(0, Math.floor(Number(req.body.nb_personnes_charge) || 0)),
+    birth_year: birthYear,
     notes: String(req.body.notes || '').slice(0, 1000)
   };
 
   db.prepare(`
     INSERT INTO foyer_fiscal
-      (user_id, situation_maritale, nb_enfants, nb_enfants_altgarde, parent_isole, nb_personnes_charge, notes)
+      (user_id, situation_maritale, nb_enfants, nb_enfants_altgarde, parent_isole, nb_personnes_charge, birth_year, notes)
     VALUES
-      (@user_id, @situation_maritale, @nb_enfants, @nb_enfants_altgarde, @parent_isole, @nb_personnes_charge, @notes)
+      (@user_id, @situation_maritale, @nb_enfants, @nb_enfants_altgarde, @parent_isole, @nb_personnes_charge, @birth_year, @notes)
     ON CONFLICT(user_id) DO UPDATE SET
       situation_maritale  = excluded.situation_maritale,
       nb_enfants          = excluded.nb_enfants,
       nb_enfants_altgarde = excluded.nb_enfants_altgarde,
       parent_isole        = excluded.parent_isole,
       nb_personnes_charge = excluded.nb_personnes_charge,
+      birth_year          = excluded.birth_year,
       notes               = excluded.notes,
       updated_at          = datetime('now')
   `).run(data);
@@ -1087,13 +1146,6 @@ app.patch('/api/admin/users/:id/role', requireAdmin, (req, res) => {
 app.get('/dashboard', (req, res) => {
   if (!req.session.userId) return res.redirect('/');
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-});
-
-app.get('/admin', (req, res) => {
-  if (!req.session.userId) return res.redirect('/');
-  const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.session.userId);
-  if (!user?.is_admin) return res.status(403).json({ error: 'Accès refusé' });
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // API : Lister tous les instruments financiers utilisés (Admin only)

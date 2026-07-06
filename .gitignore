@@ -23,3 +23,6 @@ data/*-cache.json
 
 # Misc
 *.tmp
+
+# Secret de session (généré au premier démarrage, ne jamais commiter)
+data/.session-secret
