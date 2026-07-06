@@ -67,7 +67,9 @@
           showAlert(data.error || 'Code invalide.');
           return;
         }
-        window.location.href = '/dashboard';
+        // Sur téléphone/tablette : interface mobile dédiée
+        const mobile = window.matchMedia('(max-width: 820px)').matches;
+        window.location.href = mobile ? '/mobile' : '/dashboard';
       } catch (err) {
         showAlert('Impossible de contacter le serveur.');
       } finally {

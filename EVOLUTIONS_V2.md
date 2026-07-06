@@ -114,6 +114,25 @@ GET  /api/opportunities/loan-defaults        Âge + durée max d'emprunt
 CRUD /api/opportunities                      Opportunités sauvegardées
 ```
 
+## 6. Interface iPhone (`/mobile`)
+
+Interface mobile dédiée, consommant **exactement les mêmes API** :
+
+- design iOS natif : tab bar en bas (Accueil, Patrimoine, Projection, Immo,
+  Abos), safe areas (encoche), mode sombre automatique, police système ;
+- **PWA installable** : depuis Safari → Partager → « Sur l'écran d'accueil »,
+  l'app s'ouvre en plein écran avec sa propre icône ;
+- Accueil : patrimoine total, cashflows, graphiques de répartition ;
+- Patrimoine : comptes et biens dépliables, actualisation des cours ;
+- Projection : horizons 5/10/20/30 ans, courbe et détail par placement ;
+- Opportunités : le simulateur complet — le cas d'usage mobile par excellence,
+  devant une annonce Leboncoin ;
+- Abonnements : totaux, import CSV, interrupteur « essentiel ».
+
+Après connexion, les écrans ≤ 820 px sont automatiquement dirigés vers
+`/mobile` (les autres vers `/dashboard`). La saisie détaillée des placements
+reste sur la version ordinateur.
+
 ## Cap vers l'application iPhone / iPad
 
 L'architecture reste 100 % locale (serveur Node + SQLite + frontend web),

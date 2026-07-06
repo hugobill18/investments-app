@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport-fit=cover : occuper tout l'écran, encoche iPhone comprise -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Mes Investissements</title>
+
+  <!-- PWA : installable sur l'écran d'accueil iPhone -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Patrimoine">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/js/vendor/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ==================== En-tête ==================== -->
+  <header class="app-header">
+    <h1 id="headerTitle">Patrimoine</h1>
+    <button class="header-btn" id="logoutBtn" aria-label="Se déconnecter">⏻</button>
+  </header>
+
+  <main class="app-content">
+
+    <!-- ==================== Onglet Accueil ==================== -->
+    <section class="tab-view" id="tab-home">
+      <div class="hero-card">
+        <div class="hero-label">Patrimoine total</div>
+        <div class="hero-value" id="h-total">–</div>
+        <div class="hero-sub" id="h-total-sub">–</div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">Cashflow immo</div>
+          <div class="stat-value" id="h-immo-cf">–</div>
+          <div class="stat-sub">par mois</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Flux financier</div>
+          <div class="stat-value" id="h-fin-flow">–</div>
+          <div class="stat-sub">par mois</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Répartition du patrimoine</div>
+        <div class="chart-box"><canvas id="chartHomeSplit"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Composition financière</div>
+        <div class="chart-box"><canvas id="chartHomeFin"></canvas></div>
+      </div>
+
+      <div class="empty-note" id="home-empty" hidden>
+        Aucune donnée pour l'instant. Ajoutez vos placements et biens depuis
+        la version ordinateur, ou consultez l'onglet Opportunités.
+      </div>
+    </section>
+
+    <!-- ==================== Onglet Patrimoine ==================== -->
+    <section class="tab-view" id="tab-assets" hidden>
+      <div class="segmented" id="assetsSegment">
+        <button class="seg-btn active" data-seg="fin">💹 Financier</button>
+        <button class="seg-btn" data-seg="immo">🏘️ Immobilier</button>
+      </div>
+
+      <div id="assets-fin">
+        <button class="pill-btn" id="refreshQuotesBtn">🔄 Actualiser les cours</button>
+        <div id="accountsList"></div>
+      </div>
+
+      <div id="assets-immo" hidden>
+        <div id="propertiesList"></div>
+      </div>
+
+      <div class="empty-note" id="assets-empty" hidden>
+        Aucun placement enregistré. La saisie se fait depuis la version ordinateur.
+      </div>
+    </section>
+
+    <!-- ==================== Onglet Projection ==================== -->
+    <section class="tab-view" id="tab-projection" hidden>
+      <div class="chip-row" id="projHorizon">
+        <button class="chip" data-years="5">5 ans</button>
+        <button class="chip" data-years="10">10 ans</button>
+        <button class="chip active" data-years="20">20 ans</button>
+        <button class="chip" data-years="30">30 ans</button>
+      </div>
+
+      <div class="hero-card accent">
+        <div class="hero-label" id="p-horizon-label">Patrimoine projeté</div>
+        <div class="hero-value" id="p-total">–</div>
+        <div class="hero-sub" id="p-total-sub">net de frais et de fiscalité</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Évolution</div>
+        <div class="chart-box tall"><canvas id="chartProj"></canvas></div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">Impôts sortie</div>
+          <div class="stat-value negative" id="p-tax">–</div>
+          <div class="stat-sub">selon enveloppes</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Frais cumulés</div>
+          <div class="stat-value negative" id="p-fees">–</div>
+          <div class="stat-sub">entrée + gestion</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Par placement à l'horizon</div>
+        <div id="projDetailList"></div>
+      </div>
+      <p class="foot-note">Les portefeuilles utilisent la performance 3 ans de vos positions
+        quand elle est disponible, sinon un taux prudent. Immobilier : +1 %/an.</p>
+    </section>
+
+    <!-- ==================== Onglet Opportunités ==================== -->
+    <section class="tab-view" id="tab-opportunities" hidden>
+      <div class="card">
+        <div class="card-title">Analyser une annonce</div>
+        <form id="mOppForm" class="form-stack">
+          <input type="text" id="mo-label" maxlength="120" placeholder="Nom du bien (ex : T2 Nantes)">
+          <input type="url" id="mo-url" placeholder="Lien Leboncoin / PAP / SeLoger…">
+          <div class="form-grid">
+            <label>Prix (€)<input type="number" id="mo-price" min="0" step="1000" inputmode="numeric" required placeholder="180000"></label>
+            <label>Loyer (€/mois)<input type="number" id="mo-rent" min="0" step="10" inputmode="numeric" required placeholder="750"></label>
+            <label>Taxe foncière (€/an)<input type="number" id="mo-tf" min="0" step="50" inputmode="numeric" placeholder="900"></label>
+            <label>Charges (€/an)<input type="number" id="mo-condo" min="0" step="50" inputmode="numeric" placeholder="600"></label>
+            <label>Apport (€)<input type="number" id="mo-apport" min="0" step="1000" inputmode="numeric" placeholder="0"></label>
+            <label>Travaux (€)<input type="number" id="mo-works" min="0" step="500" inputmode="numeric" placeholder="0"></label>
+            <label>État
+              <select id="mo-new">
+                <option value="0">Ancien (7,5 %)</option>
+                <option value="1">Neuf (2,5 %)</option>
+              </select>
+            </label>
+            <label>Régime
+              <select id="mo-regime">
+                <option value="micro_bic" selected>LMNP micro-BIC</option>
+                <option value="micro_foncier">Micro-foncier</option>
+                <option value="reel_foncier">Réel foncier</option>
+                <option value="reel_bic">Réel BIC</option>
+              </select>
+            </label>
+            <label>Âge emprunteur<input type="number" id="mo-age" min="18" max="75" inputmode="numeric" placeholder="35"></label>
+            <label>Taux prêt (%)<input type="number" id="mo-loan-rate" min="0" max="10" step="0.05" inputmode="decimal" value="3.5"></label>
+          </div>
+          <div id="mo-alert"></div>
+          <button type="submit" class="primary-btn">Simuler</button>
+        </form>
+      </div>
+
+      <div id="mo-result" hidden>
+        <div class="hero-card" id="mo-cf-card">
+          <div class="hero-label">Cashflow mensuel net</div>
+          <div class="hero-value" id="mo-cf">–</div>
+          <div class="hero-sub" id="mo-cf-sub">–</div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-label">Rendement net-net</div>
+            <div class="stat-value" id="mo-yield">–</div>
+            <div class="stat-sub" id="mo-yield-sub">–</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Mensualité</div>
+            <div class="stat-value" id="mo-loan">–</div>
+            <div class="stat-sub" id="mo-loan-sub">–</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Valeur du bien vs dette</div>
+          <div class="chart-box"><canvas id="chartMoEquity"></canvas></div>
+        </div>
+        <button class="primary-btn" id="mo-save" style="width:100%">💾 Sauvegarder cette opportunité</button>
+      </div>
+
+      <div class="section-title">Sauvegardées</div>
+      <div id="mo-list"></div>
+      <div class="empty-note" id="mo-empty" hidden>Aucune opportunité sauvegardée.</div>
+    </section>
+
+    <!-- ==================== Onglet Abonnements ==================== -->
+    <section class="tab-view" id="tab-subs" hidden>
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">Coût mensuel</div>
+          <div class="stat-value negative" id="ms-monthly">–</div>
+          <div class="stat-sub" id="ms-count">–</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Économie possible</div>
+          <div class="stat-value positive" id="ms-savings">–</div>
+          <div class="stat-sub">par an</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Importer un relevé CSV</div>
+        <p class="foot-note" style="margin:.25rem 0 .6rem">
+          Analysé en local, jamais stocké. Seuls les abonnements confirmés sont conservés.
+        </p>
+        <input type="file" id="ms-file" accept=".csv,.txt">
+        <div id="ms-analyze"></div>
+      </div>
+
+      <div class="section-title">Mes abonnements</div>
+      <div id="ms-list"></div>
+      <div class="empty-note" id="ms-empty" hidden>
+        Aucun abonnement suivi. Importez un relevé CSV ci-dessus.
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== Tab bar iOS ==================== -->
+  <nav class="tab-bar">
+    <button class="tab-item active" data-tab="home"><span class="tab-icon">🏠</span><span class="tab-label">Accueil</span></button>
+    <button class="tab-item" data-tab="assets"><span class="tab-icon">💼</span><span class="tab-label">Patrimoine</span></button>
+    <button class="tab-item" data-tab="projection"><span class="tab-icon">📈</span><span class="tab-label">Projection</span></button>
+    <button class="tab-item" data-tab="opportunities"><span class="tab-icon">🔎</span><span class="tab-label">Immo</span></button>
+    <button class="tab-item" data-tab="subs"><span class="tab-icon">🧾</span><span class="tab-label">Abos</span></button>
+  </nav>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/js/mobile.js"></script>
+</body>
+</html>

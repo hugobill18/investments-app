@@ -12,7 +12,8 @@ récupération des cotations / historiques / actualités (Yahoo Finance).
 > **Nouveautés v2** : sécurisation renforcée, frais & fiscalité des placements,
 > projection patrimoniale multi-années, détection des abonnements depuis un
 > relevé bancaire CSV, simulateur d'opportunités immobilières (prêt jusqu'à
-> 70 ans, notaire, fiscalité). Voir **[EVOLUTIONS_V2.md](EVOLUTIONS_V2.md)**.
+> 70 ans, notaire, fiscalité), et **interface iPhone** sur `/mobile`
+> (installable sur l'écran d'accueil). Voir **[EVOLUTIONS_V2.md](EVOLUTIONS_V2.md)**.
 
 ---
 

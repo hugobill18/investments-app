@@ -61,8 +61,10 @@
         }
 
         if (data.step === 'authenticated') {
-          // Appareil de confiance — connexion immédiate
-          window.location.href = '/dashboard';
+          // Appareil de confiance — connexion immédiate.
+          // Sur téléphone/tablette : interface mobile dédiée.
+          const mobile = window.matchMedia('(max-width: 820px)').matches;
+          window.location.href = mobile ? '/mobile' : '/dashboard';
         } else if (data.step === 'code-sent') {
           const url = new URL('/verify.html', window.location.origin);
           if (data.mocked) url.searchParams.set('mocked', '1');
