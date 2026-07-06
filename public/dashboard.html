@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mes Investissements</title>
   <link rel="stylesheet" href="/css/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <!-- Chart.js servi en local : aucune dépendance à un CDN externe -->
+  <script src="/js/vendor/chart.umd.min.js"></script>
   <!-- 🆕 APIs financières -->
   <script src="/js/api-client.js"></script>
   <script src="/js/api-integration.js"></script>
@@ -32,10 +33,12 @@
             <ul class="sidebar-submenu" data-group-content="investissements">
               <li><a href="#immobilier" class="sidebar-link sub" data-section="immobilier"><span class="icon">🏘️</span> Immobilier</a></li>
               <li><a href="#financier"  class="sidebar-link sub" data-section="financier"><span class="icon">💹</span> Financier</a></li>
+              <li><a href="#opportunites" class="sidebar-link sub" data-section="opportunites"><span class="icon">🔎</span> Opportunités</a></li>
             </ul>
           </li>
+          <li><a href="#projection" class="sidebar-link" data-section="projection"><span class="icon">📈</span> Projection</a></li>
           <li><a href="#revenus"  class="sidebar-link" data-section="revenus"><span class="icon">💰</span> Revenus</a></li>
-          <li><a href="#depenses" class="sidebar-link" data-section="depenses"><span class="icon">🧾</span> Dépenses</a></li>
+          <li><a href="#depenses" class="sidebar-link" data-section="depenses"><span class="icon">🧾</span> Abonnements</a></li>
           <li style="border-top: 1px solid #ddd; margin-top: 1rem; padding-top: 1rem;">
             <a href="/admin" class="sidebar-link" title="Admin : voir les instruments financiers">
               <span class="icon">🔧</span> Admin
@@ -187,6 +190,11 @@
 
               <div class="field-row">
                 <div class="field">
+                  <label for="f-birth-year">Année de naissance (déclarant 1)</label>
+                  <input type="number" id="f-birth-year" min="1920" max="2010" step="1" placeholder="Ex : 1985">
+                  <span class="field-hint">Sert au calcul de la durée maximale d'emprunt (fin de prêt à 70 ans)</span>
+                </div>
+                <div class="field">
                   <label for="f-nb-parts" class="parts-label">Nombre de parts fiscales</label>
                   <div id="f-nb-parts" class="parts-display">–</div>
                   <span class="field-hint" id="f-parts-detail"></span>
@@ -288,9 +296,282 @@
           </div>
         </div>
       </section>
+      <!-- ==================== Projection patrimoniale ==================== -->
+      <section class="view hidden" id="view-projection">
+        <div class="view-header">
+          <div>
+            <h1>📈 Projection patrimoniale</h1>
+            <p>Votre patrimoine simulé année par année — frais et fiscalité de chaque enveloppe inclus.</p>
+          </div>
+        </div>
+
+        <div class="proj-controls">
+          <div class="field">
+            <label for="proj-years">Horizon</label>
+            <select id="proj-years">
+              <option value="5">5 ans</option>
+              <option value="10">10 ans</option>
+              <option value="20" selected>20 ans</option>
+              <option value="25">25 ans</option>
+              <option value="30">30 ans</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="proj-immo-rate">Revalorisation immobilier (%/an)</label>
+            <input type="number" id="proj-immo-rate" value="1" min="-5" max="10" step="0.5">
+          </div>
+          <button class="primary" id="proj-refresh">Recalculer</button>
+        </div>
+
+        <div id="proj-loading" style="display:none;text-align:center;padding:2rem;color:#6b7280">Calcul en cours…</div>
+        <div id="proj-result" style="display:none">
+          <div class="summary-grid">
+            <div class="summary-card highlight">
+              <div class="summary-label">Patrimoine projeté (net)</div>
+              <div class="summary-value" id="proj-total-net">–</div>
+              <div class="summary-sub" id="proj-total-sub">–</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Gain net estimé</div>
+              <div class="summary-value positive" id="proj-gain">–</div>
+              <div class="summary-sub">vs patrimoine actuel</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Impôts à la sortie</div>
+              <div class="summary-value negative" id="proj-tax">–</div>
+              <div class="summary-sub" id="proj-tax-sub">selon chaque enveloppe</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Frais cumulés</div>
+              <div class="summary-value negative" id="proj-fees">–</div>
+              <div class="summary-sub">entrée + gestion + sortie</div>
+            </div>
+          </div>
+
+          <div class="charts-grid" style="grid-template-columns:1fr">
+            <div class="chart-card">
+              <h3>Évolution du patrimoine</h3>
+              <p class="chart-sub">Valeurs nettes de frais et de fiscalité de sortie</p>
+              <div class="chart-wrap tall"><canvas id="chartProjection"></canvas></div>
+            </div>
+          </div>
+
+          <div class="chart-card" style="margin-top:1rem">
+            <h3>Détail par placement à l'horizon</h3>
+            <table class="cashflow-table" style="width:100%">
+              <thead>
+                <tr><th style="text-align:left">Placement</th><th style="text-align:right">Taux retenu</th>
+                    <th style="text-align:left">Source du taux</th><th style="text-align:right">Valeur brute</th>
+                    <th style="text-align:right">Impôt sortie</th><th style="text-align:right">Frais</th>
+                    <th style="text-align:right">Valeur nette</th></tr>
+              </thead>
+              <tbody id="proj-detail-body"></tbody>
+            </table>
+            <p class="field-hint" style="margin-top:.5rem">
+              Les portefeuilles (PEA, CTO, AV en UC…) utilisent la performance annualisée des 3 dernières années
+              de chaque position quand elle est disponible (bornée à −5% / +12%), sinon un taux prudent par défaut.
+            </p>
+          </div>
+        </div>
+        <div class="placeholder-box" id="proj-empty" style="display:none">
+          <p style="margin:0;font-weight:600">Aucun placement ni bien à projeter</p>
+          <p style="margin:6px 0 0">Ajoutez d'abord vos placements et biens immobiliers.</p>
+        </div>
+      </section>
+
+      <!-- ==================== Opportunités immobilières ==================== -->
+      <section class="view hidden" id="view-opportunites">
+        <div class="view-header">
+          <div>
+            <h1>🔎 Opportunités immobilières</h1>
+            <p>Analysez une annonce (Leboncoin, PAP, SeLoger…) : rentabilité, fiscalité, financement et projection.</p>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <h3>Analyser une annonce</h3>
+          <form id="oppForm">
+            <div class="field-row">
+              <div class="field" style="flex:2">
+                <label for="opp-label">Nom / adresse du bien</label>
+                <input type="text" id="opp-label" maxlength="120" placeholder="Ex : T2 45m² Nantes centre">
+              </div>
+              <div class="field" style="flex:3">
+                <label for="opp-url">Lien de l'annonce <span class="help">Leboncoin, PAP, SeLoger…</span></label>
+                <input type="url" id="opp-url" placeholder="https://www.leboncoin.fr/…">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="opp-price">Prix affiché (€) *</label>
+                <input type="number" id="opp-price" min="0" step="1000" required placeholder="180000">
+              </div>
+              <div class="field">
+                <label for="opp-new">État du bien</label>
+                <select id="opp-new">
+                  <option value="0">Ancien (notaire ≈ 7,5%)</option>
+                  <option value="1">Neuf (notaire ≈ 2,5%)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="opp-works">Travaux prévus (€)</label>
+                <input type="number" id="opp-works" min="0" step="500" placeholder="0">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="opp-rent">Loyer mensuel (€) *
+                  <span class="help">Réel si déjà loué, sinon estimé</span></label>
+                <input type="number" id="opp-rent" min="0" step="10" required placeholder="750">
+              </div>
+              <div class="field">
+                <label for="opp-tf">Taxe foncière (€/an)</label>
+                <input type="number" id="opp-tf" min="0" step="50" placeholder="900">
+              </div>
+              <div class="field">
+                <label for="opp-condo">Charges copro non récup. (€/an)</label>
+                <input type="number" id="opp-condo" min="0" step="50" placeholder="600">
+              </div>
+              <div class="field">
+                <label for="opp-vacancy">Vacance locative (%)</label>
+                <input type="number" id="opp-vacancy" min="0" max="30" step="1" value="5">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="opp-apport">Apport (€)</label>
+                <input type="number" id="opp-apport" min="0" step="1000" placeholder="0">
+              </div>
+              <div class="field">
+                <label for="opp-age">Âge emprunteur
+                  <span class="help" id="opp-age-hint">Prêt le plus long possible (fin ≤ 70 ans)</span></label>
+                <input type="number" id="opp-age" min="18" max="75" step="1" placeholder="35">
+              </div>
+              <div class="field">
+                <label for="opp-loan-rate">Taux du prêt (%)</label>
+                <input type="number" id="opp-loan-rate" min="0" max="10" step="0.05" value="3.5">
+              </div>
+              <div class="field">
+                <label for="opp-regime">Régime fiscal</label>
+                <select id="opp-regime">
+                  <option value="micro_foncier">Micro-foncier (nu, −30%)</option>
+                  <option value="reel_foncier">Réel foncier</option>
+                  <option value="micro_bic" selected>Micro-BIC / LMNP (−50%)</option>
+                  <option value="reel_bic">Réel BIC</option>
+                </select>
+              </div>
+            </div>
+            <div id="oppAlert"></div>
+            <div style="display:flex;gap:.75rem;margin-top:.75rem">
+              <button type="submit" class="primary">Simuler</button>
+              <button type="button" class="secondary" id="oppSaveBtn" style="display:none">💾 Sauvegarder cette opportunité</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="opp-result" style="display:none">
+          <div class="summary-grid" style="margin-top:1rem">
+            <div class="summary-card highlight">
+              <div class="summary-label">Cashflow mensuel net</div>
+              <div class="summary-value" id="opp-cashflow">–</div>
+              <div class="summary-sub" id="opp-cashflow-sub">après crédit, charges et impôts</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Rendement net-net</div>
+              <div class="summary-value" id="opp-yield">–</div>
+              <div class="summary-sub" id="opp-yield-sub">brut : – · net : –</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Financement</div>
+              <div class="summary-value" id="opp-loan">–</div>
+              <div class="summary-sub" id="opp-loan-sub">–</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Coût total projet</div>
+              <div class="summary-value" id="opp-cost">–</div>
+              <div class="summary-sub" id="opp-cost-sub">notaire inclus</div>
+            </div>
+          </div>
+
+          <div class="charts-grid" style="grid-template-columns:1fr 1fr">
+            <div class="chart-card">
+              <h3>Valeur du bien vs capital restant dû</h3>
+              <p class="chart-sub">L'écart = votre équité (enrichissement patrimonial)</p>
+              <div class="chart-wrap"><canvas id="chartOppEquity"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <h3>Enrichissement net cumulé</h3>
+              <p class="chart-sub">Équité + cashflows cumulés − apport initial</p>
+              <div class="chart-wrap"><canvas id="chartOppEnrichment"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:1.5rem">
+          <h3 style="margin-bottom:.75rem">Opportunités sauvegardées</h3>
+          <div id="oppList"></div>
+          <div class="placeholder-box" id="opp-empty" style="display:none">
+            <p style="margin:0;font-weight:600">Aucune opportunité sauvegardée</p>
+            <p style="margin:6px 0 0">Simulez une annonce puis cliquez sur « Sauvegarder ».</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== Abonnements (Dépenses) ==================== -->
       <section class="view hidden" id="view-depenses">
-        <h1>🧾 Dépenses</h1><p>Vos sorties d'argent.</p>
-        <div class="placeholder-box"><p style="margin:0;font-weight:600">Section à construire</p></div>
+        <div class="view-header">
+          <div>
+            <h1>🧾 Abonnements &amp; dépenses récurrentes</h1>
+            <p>Importez un relevé bancaire (CSV) : les abonnements sont détectés automatiquement, en local.</p>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Coût mensuel</div>
+            <div class="summary-value" id="sub-monthly">0 €</div>
+            <div class="summary-sub" id="sub-count">0 abonnement</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Coût annuel</div>
+            <div class="summary-value" id="sub-annual">0 €</div>
+            <div class="summary-sub">tous abonnements confondus</div>
+          </div>
+          <div class="summary-card highlight">
+            <div class="summary-label">Économie potentielle</div>
+            <div class="summary-value positive" id="sub-savings">0 € / an</div>
+            <div class="summary-sub">abonnements marqués « dispensables »</div>
+          </div>
+        </div>
+
+        <div class="charts-grid" style="grid-template-columns:1fr 2fr">
+          <div class="chart-card">
+            <h3>Répartition par catégorie</h3>
+            <div class="chart-wrap"><canvas id="chartSubs"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3>Importer un relevé bancaire</h3>
+            <p class="chart-sub">
+              Export CSV depuis votre banque (date, libellé, montant). Le fichier est analysé par votre
+              serveur local et n'est <strong>jamais stocké ni transmis</strong> — seuls les abonnements
+              que vous confirmez sont conservés.
+            </p>
+            <input type="file" id="sub-file" accept=".csv,.txt" style="margin:.5rem 0">
+            <div id="sub-analyze-result"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:1rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+            <h3 style="margin:0">Mes abonnements</h3>
+            <button class="primary" id="addSubBtn">+ Ajouter manuellement</button>
+          </div>
+          <div id="subList"></div>
+          <div class="placeholder-box" id="sub-empty" style="display:none">
+            <p style="margin:0;font-weight:600">Aucun abonnement enregistré</p>
+            <p style="margin:6px 0 0">Importez un relevé CSV ou ajoutez vos abonnements à la main.</p>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -442,6 +723,32 @@
           (titres, quantité, prix d'achat, prix actuel) directement depuis la carte.
         </div>
 
+        <!-- Frais & ancienneté : utilisés par la projection et la fiscalité -->
+        <details id="a-fees-details" style="margin:.5rem 0">
+          <summary style="cursor:pointer;font-weight:600;font-size:.85rem">💸 Frais &amp; ancienneté (projection, fiscalité)</summary>
+          <div class="field-row" style="margin-top:.5rem">
+            <div class="field">
+              <label for="a-fees-entry">Frais d'entrée / versement (%)</label>
+              <input type="number" id="a-fees-entry" min="0" max="10" step="0.05" placeholder="0">
+            </div>
+            <div class="field">
+              <label for="a-fees-mgmt">Frais de gestion (%/an)</label>
+              <input type="number" id="a-fees-mgmt" min="0" max="10" step="0.05" placeholder="0">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="a-fees-exit">Frais de sortie (%)</label>
+              <input type="number" id="a-fees-exit" min="0" max="10" step="0.05" placeholder="0">
+            </div>
+            <div class="field">
+              <label for="a-opened-year">Année d'ouverture
+                <span class="help">Ancienneté fiscale (PEA 5 ans, AV 8 ans)</span></label>
+              <input type="number" id="a-opened-year" min="1950" max="2100" step="1" placeholder="Ex : 2018">
+            </div>
+          </div>
+        </details>
+
         <div id="accountAlert"></div>
         <div class="modal-footer">
           <button type="button" class="secondary" id="deleteAccountBtn" style="display:none">Supprimer</button>
@@ -504,6 +811,65 @@
           <button type="button" class="secondary" id="deletePositionBtn" style="display:none">Supprimer</button>
           <div class="spacer"></div>
           <button type="button" class="secondary" data-modal-close="modalPosition">Annuler</button>
+          <button type="submit" class="primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== Modale : abonnement ==================== -->
+  <div class="modal-backdrop" id="modalSub" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalSubTitle">Ajouter un abonnement</h2>
+        <button class="icon-btn" data-modal-close="modalSub" aria-label="Fermer">✕</button>
+      </div>
+      <form id="subForm" class="modal-body">
+        <input type="hidden" id="sub-id">
+        <div class="field">
+          <label for="sub-label">Libellé *</label>
+          <input type="text" id="sub-label" required maxlength="120" placeholder="Ex : Netflix, Salle de sport…">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="sub-amount">Montant (€) *</label>
+            <input type="number" id="sub-amount" min="0" step="0.01" required placeholder="12,99">
+          </div>
+          <div class="field">
+            <label for="sub-periodicity">Périodicité</label>
+            <select id="sub-periodicity">
+              <option value="mensuel">Mensuel</option>
+              <option value="trimestriel">Trimestriel</option>
+              <option value="annuel">Annuel</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="sub-category">Catégorie</label>
+            <select id="sub-category">
+              <option value="streaming">Streaming</option>
+              <option value="telecom">Télécom</option>
+              <option value="energie">Énergie</option>
+              <option value="assurance">Assurance</option>
+              <option value="sport">Sport</option>
+              <option value="logiciel">Logiciel</option>
+              <option value="presse">Presse</option>
+              <option value="transport">Transport</option>
+              <option value="banque">Banque</option>
+              <option value="autre" selected>Autre</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="checkbox-label">
+            <input type="checkbox" id="sub-essential" checked>
+            Abonnement essentiel (décochez pour le compter comme économie potentielle)
+          </label>
+        </div>
+        <div id="subAlert"></div>
+        <div class="modal-footer">
+          <button type="button" class="secondary" id="deleteSubBtn" style="display:none">Supprimer</button>
+          <div class="spacer"></div>
+          <button type="button" class="secondary" data-modal-close="modalSub">Annuler</button>
           <button type="submit" class="primary">Enregistrer</button>
         </div>
       </form>
@@ -1098,7 +1464,13 @@
           <td class="num">${cp.toLocaleString('fr-FR', {maximumFractionDigits:2})}</td>
           <td class="num">${fmtEur(value)}</td>
           <td class="num ${cls}">${fmtEur(gain, {signed:true})}<br><span class="small">${fmtPct(pct)}</span></td>
-          <td><button class="icon-btn" data-action="edit-position">✏️</button></td>
+          <td style="white-space:nowrap">
+            <button class="icon-btn" data-action="edit-position">✏️</button>
+            ${pos.ticker ? `<button class="icon-btn" data-action="pos-insights" title="Performance 3 ans &amp; actualités">📊</button>` : ''}
+          </td>
+        </tr>
+        <tr class="pos-insights-row" data-insights-for="${pos.id}" style="display:none">
+          <td colspan="7"><div class="insights-panel" id="insights-${pos.id}"></div></td>
         </tr>`;
     }
 
@@ -1244,6 +1616,12 @@
       document.getElementById('a-rate').value   = a?.annual_rate ?? '';
       document.getElementById('a-in').value     = a?.monthly_in ?? '';
       document.getElementById('a-out').value    = a?.monthly_out ?? '';
+      document.getElementById('a-fees-entry').value  = a?.fees_entry_pct || '';
+      document.getElementById('a-fees-mgmt').value   = a?.fees_mgmt_pct || '';
+      document.getElementById('a-fees-exit').value   = a?.fees_exit_pct || '';
+      document.getElementById('a-opened-year').value = a?.opened_year || '';
+      document.getElementById('a-fees-details').open =
+        !!(a && (a.fees_entry_pct || a.fees_mgmt_pct || a.fees_exit_pct || a.opened_year));
       updateAccountFormVisibility();
       openModalById('modalAccount');
       setTimeout(() => document.getElementById('a-label').focus(), 50);
@@ -1260,7 +1638,11 @@
         amount:       isPortfolio(type) ? 0 : (document.getElementById('a-amount').value || 0),
         annual_rate:  isPortfolio(type) ? 0 : (document.getElementById('a-rate').value   || 0),
         monthly_in:   isPortfolio(type) ? 0 : (document.getElementById('a-in').value     || 0),
-        monthly_out:  isPortfolio(type) ? 0 : (document.getElementById('a-out').value    || 0)
+        monthly_out:  isPortfolio(type) ? 0 : (document.getElementById('a-out').value    || 0),
+        fees_entry_pct: document.getElementById('a-fees-entry').value  || 0,
+        fees_mgmt_pct:  document.getElementById('a-fees-mgmt').value   || 0,
+        fees_exit_pct:  document.getElementById('a-fees-exit').value   || 0,
+        opened_year:    document.getElementById('a-opened-year').value || null
       };
       try {
         if (id) await api(`/api/financial-accounts/${id}`, { method: 'PUT', body: payload });
@@ -1508,6 +1890,7 @@
         fEnfants.value            = foyerCache.nb_enfants || 0;
         fAltGarde.value           = foyerCache.nb_enfants_altgarde || 0;
         fParentIsole.checked      = !!foyerCache.parent_isole;
+        document.getElementById('f-birth-year').value = foyerCache.birth_year || '';
         updateFoyerPreview();
       } catch (e) {
         console.warn('Foyer non chargé', e.message);
@@ -1521,7 +1904,8 @@
         nb_enfants:           parseInt(fEnfants.value) || 0,
         nb_enfants_altgarde:  parseInt(fAltGarde.value) || 0,
         parent_isole:         fParentIsole.checked,
-        nb_personnes_charge:  0
+        nb_personnes_charge:  0,
+        birth_year:           parseInt(document.getElementById('f-birth-year').value) || null
       };
       try {
         foyerCache = await api('/api/foyer', { method: 'PUT', body: payload });
@@ -1743,5 +2127,7 @@
       a.addEventListener('click', e => { e.preventDefault(); showSection(a.getAttribute('href').replace('#','')); });
     });
   </script>
+  <!-- Évolutions : projection, opportunités immo, abonnements, insights positions -->
+  <script src="/js/features.js"></script>
 </body>
 </html>
