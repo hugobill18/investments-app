@@ -20,24 +20,26 @@
   .badge{display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600;}
   .badge.admin{background:#f59e0b; color:#111;}
   .badge.user{background:#374151; color:#e5e7eb;}
+  .badge.interne{background:#dbeafe; color:#1e40af;}
+  .badge.externe{background:#fce7f3; color:#9d174d;}
   nav{background:#fff; border-bottom:1px solid var(--border); padding:0 20px; display:flex; gap:4px; flex-wrap:wrap;}
   nav button{border:none; background:none; padding:12px 14px; font-size:14px; cursor:pointer; color:var(--muted); border-bottom:3px solid transparent;}
   nav button.active{color:var(--primary); border-bottom-color:var(--primary); font-weight:600;}
   nav button:hover{color:var(--primary);}
-  main{padding:20px; max-width:1300px; margin:0 auto;}
+  main{padding:20px; max-width:1400px; margin:0 auto;}
   .card{background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:16px;}
   .card h2{font-size:15px; margin-bottom:12px;}
-  .card h3{font-size:13px; margin:14px 0 8px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;}
   .row{display:flex; gap:16px; flex-wrap:wrap;}
-  .row > .card{flex:1; min-width:280px;}
+  .row > .card{flex:1; min-width:300px;}
   table{width:100%; border-collapse:collapse; font-size:13px;}
   th,td{padding:7px 8px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle;}
   th{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px;}
   tr:hover td{background:#f9fafb;}
   label{display:block; font-size:12px; color:var(--muted); margin:8px 0 3px;}
   input,select,textarea{width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:6px; font-size:14px; font-family:inherit; background:#fff;}
-  input:focus,select:focus,textarea:focus{outline:2px solid #bfdbfe; border-color:var(--primary);}
+  input:focus,select:focus{outline:2px solid #bfdbfe; border-color:var(--primary);}
   input[type=checkbox]{width:auto;}
+  table input, table select{padding:4px 6px; font-size:13px;}
   button.btn{background:var(--primary); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:500;}
   button.btn:hover{background:var(--primary-dark);}
   button.btn.secondary{background:#e5e7eb; color:var(--text);}
@@ -53,11 +55,11 @@
   .kpi{flex:1; min-width:130px; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center;}
   .kpi .v{font-size:26px; font-weight:700;}
   .kpi .l{font-size:12px; color:var(--muted); margin-top:2px;}
-  /* Calendrier */
   .calwrap{overflow-x:auto;}
   table.cal{border:1px solid var(--border);}
   table.cal th, table.cal td{border:1px solid var(--border); text-align:center; padding:3px 2px; min-width:26px; font-size:11px;}
-  table.cal th.person, table.cal td.person{text-align:left; min-width:140px; padding-left:8px; font-weight:600; font-size:12px; position:sticky; left:0; background:#fff; z-index:1;}
+  table.cal th.person, table.cal td.person{text-align:left; min-width:160px; padding-left:8px; font-weight:600; font-size:12px; position:sticky; left:0; background:#fff; z-index:1;}
+  table.cal td.person .sub{font-weight:400; color:var(--muted); font-size:10px;}
   table.cal td.we{background:#eef1f5; color:#b0b7c3;}
   table.cal td.hol{background:#fde68a;}
   table.cal td.absent{color:#fff; font-weight:700;}
@@ -65,9 +67,8 @@
   table.cal tr.caprow td{background:#f3f4f6; font-weight:700;}
   .legend{display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--muted);}
   .legend .sw{display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:4px;}
-  /* Overlay connexion */
   .overlay{position:fixed; inset:0; background:rgba(17,24,39,.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px;}
-  .overlay .box{background:#fff; border-radius:10px; padding:28px; max-width:520px; width:100%; max-height:92vh; overflow:auto;}
+  .overlay .box{background:#fff; border-radius:10px; padding:28px; max-width:540px; width:100%; max-height:92vh; overflow:auto;}
   .overlay .box h2{margin-bottom:8px; font-size:18px;}
   .overlay .box p{color:var(--muted); font-size:13px; margin-bottom:14px; line-height:1.5;}
   .notice{background:#fef3c7; border:1px solid #fcd34d; border-radius:6px; padding:9px 12px; font-size:13px; margin-bottom:12px;}
@@ -76,7 +77,7 @@
   .hidden{display:none !important;}
   .muted{color:var(--muted); font-size:12px;}
   .toast{position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:10px 18px; border-radius:8px; font-size:13px; z-index:60; box-shadow:0 4px 14px rgba(0,0,0,.25);}
-  .actions{display:flex; gap:6px; flex-wrap:wrap;}
+  .actions{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
   .formgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:0 14px;}
 </style>
 </head>
@@ -98,14 +99,13 @@
 <div class="overlay" id="ov-connect">
   <div class="box">
     <h2>Bienvenue 👋</h2>
-    <p>Cette application gère les congés, télétravail et absences de l'équipe.
+    <p>Cette application gère les congés, télétravail et absences des équipes.
        Les données sont stockées dans un <b>dossier partagé</b> (par exemple un dossier
        OneDrive/SharePoint synchronisé sur votre PC). Choisissez ce dossier pour commencer.</p>
     <div id="connect-fs">
       <button class="btn" id="btn-pick-folder">📂 Choisir le dossier de données</button>
-      <p class="muted" style="margin-top:10px">Astuce : sélectionnez le dossier OneDrive partagé par votre responsable
-      (ex. <i>Documents partagés &gt; Capacité Équipe &gt; donnees</i>). Le navigateur vous demandera
-      l'autorisation de lecture/écriture : cliquez sur « Autoriser ».</p>
+      <p class="muted" style="margin-top:10px">Astuce : sélectionnez le dossier <code>donnees</code> du OneDrive partagé
+      par votre responsable. Le navigateur vous demandera l'autorisation de lecture/écriture : cliquez sur « Autoriser ».</p>
     </div>
     <div id="connect-unsupported" class="hidden">
       <div class="notice err">Votre navigateur ne permet pas l'accès aux dossiers locaux
@@ -120,9 +120,12 @@
   <div class="box">
     <h2>Première utilisation — configuration</h2>
     <p>Ce dossier ne contient pas encore de données. Créez le premier compte
-       (il sera <b>administrateur</b>) et les jours fériés seront générés automatiquement.</p>
+       (il sera <b>administrateur</b>). Une équipe par défaut et le lieu « Paris »
+       (fériés français générés) seront créés — le tout modifiable ensuite dans Paramètres.</p>
     <label>Votre nom complet</label>
     <input id="setup-name" placeholder="ex : Marie Dupont">
+    <label>Votre login Windows (pour la connexion automatique via Lancer.cmd)</label>
+    <input id="setup-login" placeholder="ex : mdupont">
     <div class="formgrid">
       <div><label>Congés payés / an (jours)</label><input id="setup-cp" type="number" value="25" min="0" step="0.5"></div>
       <div><label>RTT / an (jours)</label><input id="setup-rtt" type="number" value="10" min="0" step="0.5"></div>
@@ -135,8 +138,10 @@
 <div class="overlay hidden" id="ov-login">
   <div class="box">
     <h2>Qui êtes-vous ?</h2>
-    <p>Sélectionnez votre nom. <span class="muted">(Identification déclarative — voir la note
-       de l'administrateur sur les limites de confidentialité.)</span></p>
+    <div id="login-hint"></div>
+    <p>Sélectionnez votre nom. <span class="muted">Pour une connexion automatique, lancez
+       l'application via <b>Lancer.cmd</b> et demandez à un administrateur d'associer
+       votre login Windows dans Paramètres.</span></p>
     <select id="login-select"></select>
     <div style="margin-top:16px"><button class="btn" id="btn-login">Entrer</button></div>
   </div>
@@ -146,22 +151,25 @@
 "use strict";
 /* =====================================================================
    Capacité Équipe — application monofichier, sans serveur.
-   Données : un dossier partagé (OneDrive synchronisé) contenant
-     config.json            -> personnes, rôles, soldes annuels, jours fériés
+   Données (dossier partagé OneDrive synchronisé) :
+     config.json            -> équipes, lieux, personnes, rôles, fériés
      requests/req_*.json    -> une demande/absence par fichier (limite les
                                conflits de synchronisation OneDrive)
+   Connexion automatique : Lancer.cmd ouvre index.html?login=%USERNAME%
+   et le login est rapproché du champ « Login Windows » de chaque personne.
    ===================================================================== */
 
 /* ---------- Types d'absence ---------- */
 const TYPES = {
-  CP:  {label:"Congé payé",       color:"var(--cp)",  hex:"#2563eb", needsApproval:true,  deducts:"cp",  absent:true},
-  RTT: {label:"RTT",              color:"var(--rtt)", hex:"#7c3aed", needsApproval:true,  deducts:"rtt", absent:true},
-  TT:  {label:"Télétravail",      color:"var(--tt)",  hex:"#059669", needsApproval:false, deducts:null,  absent:false},
-  MAL: {label:"Arrêt maladie",    color:"var(--mal)", hex:"#d97706", needsApproval:false, deducts:null,  absent:true},
-  ABS: {label:"Absence imprévue", color:"var(--abs)", hex:"#dc2626", needsApproval:false, deducts:null,  absent:true},
-  SS:  {label:"Congé sans solde", color:"var(--ss)",  hex:"#6b7280", needsApproval:true,  deducts:null,  absent:true},
+  CP:  {label:"Congé payé",       hex:"#2563eb", needsApproval:true,  deducts:"cp",  absent:true},
+  RTT: {label:"RTT",              hex:"#7c3aed", needsApproval:true,  deducts:"rtt", absent:true},
+  TT:  {label:"Télétravail",      hex:"#059669", needsApproval:false, deducts:null,  absent:false},
+  MAL: {label:"Arrêt maladie",    hex:"#d97706", needsApproval:false, deducts:null,  absent:true},
+  ABS: {label:"Absence imprévue", hex:"#dc2626", needsApproval:false, deducts:null,  absent:true},
+  SS:  {label:"Congé sans solde", hex:"#6b7280", needsApproval:true,  deducts:null,  absent:true},
 };
 const STATUS = {pending:"En attente", approved:"Validé", rejected:"Refusé"};
+const CONTRACTS = {interne:{label:"Interne", target:206}, externe:{label:"Externe", target:210}};
 
 /* ---------- Utilitaires dates ---------- */
 const pad = n => String(n).padStart(2,"0");
@@ -179,41 +187,115 @@ function easterSunday(y){ // algorithme de Butcher
         mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
   return new Date(y,mo-1,da);
 }
-function frenchHolidays(y){
-  const e = easterSunday(y);
-  return [
-    {date:`${y}-01-01`, label:"Jour de l'an"},
-    {date:iso(addDays(e,1)),  label:"Lundi de Pâques"},
-    {date:`${y}-05-01`, label:"Fête du Travail"},
-    {date:`${y}-05-08`, label:"Victoire 1945"},
-    {date:iso(addDays(e,39)), label:"Ascension"},
-    {date:iso(addDays(e,50)), label:"Lundi de Pentecôte"},
-    {date:`${y}-07-14`, label:"Fête nationale"},
-    {date:`${y}-08-15`, label:"Assomption"},
-    {date:`${y}-11-01`, label:"Toussaint"},
-    {date:`${y}-11-11`, label:"Armistice 1918"},
-    {date:`${y}-12-25`, label:"Noël"},
-  ];
+function nthWeekday(y,m,dow,n){ // n-ième <dow> (0=dim) du mois m (0-11)
+  const d=new Date(y,m,1); let c=0;
+  for(;;){ if(d.getDay()===dow){ c++; if(c===n) return new Date(d); } d.setDate(d.getDate()+1); }
+}
+function mondayBefore(y,m,day){ // lundi strictement avant le <day> du mois
+  const d=new Date(y,m,day);
+  do{ d.setDate(d.getDate()-1); }while(d.getDay()!==1);
+  return d;
 }
 
+/* ---------- Générateurs de jours fériés par pays/lieu ---------- */
+function holFR(y){ const e=easterSunday(y); return [
+  {date:`${y}-01-01`,label:"Jour de l'an"},
+  {date:iso(addDays(e,1)),label:"Lundi de Pâques"},
+  {date:`${y}-05-01`,label:"Fête du Travail"},
+  {date:`${y}-05-08`,label:"Victoire 1945"},
+  {date:iso(addDays(e,39)),label:"Ascension"},
+  {date:iso(addDays(e,50)),label:"Lundi de Pentecôte"},
+  {date:`${y}-07-14`,label:"Fête nationale"},
+  {date:`${y}-08-15`,label:"Assomption"},
+  {date:`${y}-11-01`,label:"Toussaint"},
+  {date:`${y}-11-11`,label:"Armistice 1918"},
+  {date:`${y}-12-25`,label:"Noël"},
+];}
+function holPT(y){ const e=easterSunday(y); return [
+  {date:`${y}-01-01`,label:"Ano Novo"},
+  {date:iso(addDays(e,-2)),label:"Sexta-feira Santa"},
+  {date:`${y}-04-25`,label:"Dia da Liberdade"},
+  {date:`${y}-05-01`,label:"Dia do Trabalhador"},
+  {date:iso(addDays(e,60)),label:"Corpo de Deus"},
+  {date:`${y}-06-10`,label:"Dia de Portugal"},
+  {date:`${y}-06-13`,label:"Santo António (Lisbonne)"},
+  {date:`${y}-08-15`,label:"Assunção"},
+  {date:`${y}-10-05`,label:"Implantação da República"},
+  {date:`${y}-11-01`,label:"Todos os Santos"},
+  {date:`${y}-12-01`,label:"Restauração da Independência"},
+  {date:`${y}-12-08`,label:"Imaculada Conceição"},
+  {date:`${y}-12-25`,label:"Natal"},
+];}
+function holMY(y){ return [ // fériés à date fixe de Kuala Lumpur (territoire fédéral)
+  {date:`${y}-01-01`,label:"New Year's Day"},
+  {date:`${y}-02-01`,label:"Federal Territory Day"},
+  {date:`${y}-05-01`,label:"Labour Day"},
+  {date:iso(nthWeekday(y,5,1,1)),label:"Agong's Birthday"},
+  {date:`${y}-08-31`,label:"Merdeka Day"},
+  {date:`${y}-09-16`,label:"Malaysia Day"},
+  {date:`${y}-12-25`,label:"Christmas Day"},
+];}
+function holLU(y){ const e=easterSunday(y); return [
+  {date:`${y}-01-01`,label:"Jour de l'an"},
+  {date:iso(addDays(e,1)),label:"Lundi de Pâques"},
+  {date:`${y}-05-01`,label:"Fête du Travail"},
+  {date:`${y}-05-09`,label:"Journée de l'Europe"},
+  {date:iso(addDays(e,39)),label:"Ascension"},
+  {date:iso(addDays(e,50)),label:"Lundi de Pentecôte"},
+  {date:`${y}-06-23`,label:"Fête nationale"},
+  {date:`${y}-08-15`,label:"Assomption"},
+  {date:`${y}-11-01`,label:"Toussaint"},
+  {date:`${y}-12-25`,label:"Noël"},
+  {date:`${y}-12-26`,label:"Saint-Étienne"},
+];}
+function holQC(y){ const e=easterSunday(y); return [
+  {date:`${y}-01-01`,label:"Jour de l'an"},
+  {date:iso(addDays(e,-2)),label:"Vendredi saint"},
+  {date:iso(mondayBefore(y,4,25)),label:"Journée nationale des patriotes"},
+  {date:`${y}-06-24`,label:"Fête nationale du Québec"},
+  {date:`${y}-07-01`,label:"Fête du Canada"},
+  {date:iso(nthWeekday(y,8,1,1)),label:"Fête du travail"},
+  {date:iso(nthWeekday(y,9,1,2)),label:"Action de grâce"},
+  {date:`${y}-12-25`,label:"Noël"},
+];}
+const HOLGENS = {
+  FR:{label:"France (Paris)", gen:holFR},
+  PT:{label:"Portugal (Lisbonne)", gen:holPT},
+  MY:{label:"Malaisie (Kuala Lumpur)", gen:holMY,
+      note:"⚠ Seuls les fériés à date fixe sont générés. Ajoutez chaque année manuellement : Nouvel An chinois (2 j), Thaipusam, Hari Raya Aidilfitri (2 j), Wesak, Hari Raya Haji, Awal Muharram, Maulidur Rasul, Deepavali."},
+  LU:{label:"Luxembourg", gen:holLU},
+  CA_QC:{label:"Canada — Québec (Montréal)", gen:holQC,
+      note:"Le Vendredi saint est généré ; certains employeurs chôment le lundi de Pâques à la place — ajustez si besoin."},
+  NONE:{label:"Autre (saisie manuelle)", gen:()=>[]},
+};
+
 /* ---------- État global ---------- */
-let config = null;          // {people:[], holidays:[]}
-let requests = [];          // liste des demandes
-let currentUser = null;     // personne connectée
+let config = null;
+let requests = [];
+let currentUser = null;
 let currentTab = "me";
-let calYear, calMonth;      // calendrier affiché
+let calYear, calMonth, calTeam = "all", teamViewFilter = "all", settingsLoc = null;
 const now = new Date();
 calYear = now.getFullYear(); calMonth = now.getMonth();
+const DETECTED_LOGIN = (new URLSearchParams(location.search).get("login")||"").trim();
 
-const holidaySet = () => new Set((config?.holidays||[]).map(h=>h.date));
-const holidayLabel = s => (config?.holidays||[]).find(h=>h.date===s)?.label;
 const personById = id => (config?.people||[]).find(p=>p.id===id);
+const teamById = id => (config?.teams||[]).find(t=>t.id===id);
+const locById = id => (config?.locations||[]).find(l=>l.id===id);
 const isAdmin = () => currentUser?.role === "admin";
 const uid = () => Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
+const activePeople = () => config.people.filter(p=>p.active!==false);
+const contractTarget = p => p.target ?? CONTRACTS[p.contract||"interne"].target;
 
-/* ---------- Décompte de jours ouvrés ---------- */
-function openDays(startIso, endIso, half){
-  const hs = holidaySet();
+function locHolidaySet(locId){
+  return new Set(config.holidays.filter(h=>h.locationId===locId).map(h=>h.date));
+}
+function locHolidayLabel(locId, dIso){
+  return config.holidays.find(h=>h.locationId===locId && h.date===dIso)?.label;
+}
+
+/* ---------- Décompte de jours ouvrés (selon le lieu de la personne) ---------- */
+function openDaysSet(startIso, endIso, half, hs){
   let n=0;
   for(let d=fromIso(startIso); iso(d)<=endIso; d=addDays(d,1)){
     if(!isWeekend(d) && !hs.has(iso(d))) n++;
@@ -221,31 +303,31 @@ function openDays(startIso, endIso, half){
   if(half && startIso===endIso && n>0) n = 0.5;
   return n;
 }
-// portion d'une demande qui tombe dans l'année y
-function openDaysInYear(r, y){
+function openDaysP(startIso, endIso, half, person){
+  return openDaysSet(startIso, endIso, half, locHolidaySet(person.locationId));
+}
+function openDaysInYear(r, y, person){
   const a = r.start < `${y}-01-01` ? `${y}-01-01` : r.start;
   const b = r.end   > `${y}-12-31` ? `${y}-12-31` : r.end;
   if(a>b) return 0;
-  if(a===r.start && b===r.end) return openDays(r.start,r.end,r.half);
-  return openDays(a,b,null);
+  const hs = locHolidaySet(person.locationId);
+  if(a===r.start && b===r.end) return openDaysSet(r.start,r.end,r.half,hs);
+  return openDaysSet(a,b,null,hs);
+}
+function businessDaysYear(locId, y){
+  return openDaysSet(`${y}-01-01`, `${y}-12-31`, null, locHolidaySet(locId));
 }
 
 /* =====================================================================
    Couche de stockage : dossier partagé (File System Access) ou démo
    ===================================================================== */
 const store = {
-  mode: null,       // "fs" | "demo"
-  dir: null,        // FileSystemDirectoryHandle
-
-  async connectFolder(handle){
-    this.dir = handle; this.mode = "fs";
-    await idbSet("dirHandle", handle);
-  },
+  mode: null, dir: null,
+  async connectFolder(handle){ this.dir=handle; this.mode="fs"; await idbSet("dirHandle",handle); },
   async readJson(name, dirH){
     try{
       const fh = await (dirH||this.dir).getFileHandle(name);
-      const f = await fh.getFile();
-      const t = await f.text();
+      const t = await (await fh.getFile()).text();
       return t.trim() ? JSON.parse(t) : null;
     }catch(e){ return null; }
   },
@@ -256,16 +338,15 @@ const store = {
     await w.close();
   },
   async loadConfig(){
-    if(this.mode==="demo") return JSON.parse(localStorage.getItem("tc_config")||"null");
-    return await this.readJson("config.json");
+    const raw = this.mode==="demo" ? JSON.parse(localStorage.getItem("tc_config")||"null")
+                                   : await this.readJson("config.json");
+    return migrate(raw);
   },
   async saveConfig(cfg){
     if(this.mode==="demo"){ localStorage.setItem("tc_config",JSON.stringify(cfg)); return; }
     await this.writeJson("config.json", cfg);
   },
-  async requestsDir(create){
-    return await this.dir.getDirectoryHandle("requests",{create:!!create});
-  },
+  async requestsDir(create){ return await this.dir.getDirectoryHandle("requests",{create:!!create}); },
   async loadRequests(){
     if(this.mode==="demo") return JSON.parse(localStorage.getItem("tc_requests")||"[]");
     const out=[];
@@ -296,6 +377,25 @@ const store = {
   },
 };
 
+/* Migration des données v1 (mono-équipe, fériés globaux) vers v2 */
+function migrate(cfg){
+  if(!cfg) return cfg;
+  if(cfg.version>=2) return cfg;
+  cfg.teams = cfg.teams || [{id:"t-"+uid(), name:"Équipe 1"}];
+  cfg.locations = cfg.locations || [{id:"l-"+uid(), name:"Paris", gen:"FR"}];
+  const defLoc = cfg.locations[0].id, defTeam = cfg.teams[0].id;
+  cfg.holidays = (cfg.holidays||[]).map(h=>h.locationId?h:{...h, locationId:defLoc});
+  for(const p of cfg.people||[]){
+    if(p.teamId===undefined) p.teamId = defTeam;
+    if(p.locationId===undefined) p.locationId = defLoc;
+    if(p.contract===undefined) p.contract = "interne";
+    if(p.target===undefined) p.target = CONTRACTS[p.contract].target;
+    if(p.winLogin===undefined) p.winLogin = "";
+  }
+  cfg.version = 2;
+  return cfg;
+}
+
 /* IndexedDB minimal pour mémoriser le dossier choisi entre deux lancements */
 function idbOpen(){ return new Promise((res,rej)=>{
   const rq = indexedDB.open("capacite-equipe",1);
@@ -312,11 +412,11 @@ async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)
 });}
 
 /* =====================================================================
-   Démarrage
+   Démarrage & identification
    ===================================================================== */
 async function boot(){
   document.getElementById("btn-refresh").onclick = ()=>reloadData(true);
-  document.getElementById("btn-switch-user").onclick = ()=>{ localStorage.removeItem("tc_user"); showLogin(); };
+  document.getElementById("btn-switch-user").onclick = ()=>{ localStorage.removeItem("tc_user"); currentUser=null; showLogin(true); };
   window.addEventListener("focus", ()=>{ if(store.mode==="fs" && config) reloadData(false); });
 
   if(!window.showDirectoryPicker){
@@ -325,13 +425,11 @@ async function boot(){
     document.getElementById("btn-demo").onclick = async ()=>{ store.mode="demo"; await afterConnect(); };
   }else{
     document.getElementById("btn-pick-folder").onclick = pickFolder;
-    // tentative de reconnexion silencieuse au dossier mémorisé
     try{
       const h = await idbGet("dirHandle");
       if(h){
         const p = await h.queryPermission({mode:"readwrite"});
         if(p==="granted"){ store.dir=h; store.mode="fs"; await afterConnect(); return; }
-        // permission à re-demander : il faut un geste utilisateur
         const btn = document.getElementById("btn-pick-folder");
         btn.textContent = "📂 Reconnecter le dossier « "+h.name+" »";
         btn.onclick = async ()=>{
@@ -363,35 +461,56 @@ async function afterConnect(){
   config = await store.loadConfig();
   if(!config){ showSetup(); return; }
   requests = await store.loadRequests();
-  showLogin();
+  showLogin(false);
 }
 function showSetup(){
   document.getElementById("ov-setup").classList.remove("hidden");
+  if(DETECTED_LOGIN) document.getElementById("setup-login").value = DETECTED_LOGIN;
   document.getElementById("btn-setup-ok").onclick = async ()=>{
     const name = document.getElementById("setup-name").value.trim();
     if(!name){ return setupErr("Veuillez saisir votre nom."); }
+    const winLogin = document.getElementById("setup-login").value.trim();
     const cp  = parseFloat(document.getElementById("setup-cp").value)||0;
     const rtt = parseFloat(document.getElementById("setup-rtt").value)||0;
     const y = new Date().getFullYear();
+    const teamId = "t-"+uid(), locId = "l-"+uid();
     config = {
-      version:1,
-      people:[{id:uid(), name, role:"admin", cp, rtt, active:true}],
-      holidays:[...frenchHolidays(y), ...frenchHolidays(y+1)],
+      version:2,
+      teams:[{id:teamId, name:"Équipe 1"}],
+      locations:[{id:locId, name:"Paris", gen:"FR"}],
+      people:[{id:uid(), name, winLogin, role:"admin", teamId, locationId:locId,
+               contract:"interne", target:CONTRACTS.interne.target, cp, rtt, active:true}],
+      holidays:[...holFR(y), ...holFR(y+1)].map(h=>({...h, locationId:locId})),
     };
     try{ await store.saveConfig(config); }
     catch(e){ return setupErr("Impossible d'écrire dans le dossier : "+e.message); }
     requests = [];
     document.getElementById("ov-setup").classList.add("hidden");
-    showLogin();
+    showLogin(false);
   };
   function setupErr(m){ const el=document.getElementById("setup-error"); el.textContent=m; el.classList.remove("hidden"); }
 }
-function showLogin(){
+function showLogin(forceManual){
+  const people = activePeople();
+  // 1. connexion automatique par login Windows (?login= fourni par Lancer.cmd)
+  if(!forceManual && DETECTED_LOGIN){
+    const match = people.find(p=>(p.winLogin||"").toLowerCase()===DETECTED_LOGIN.toLowerCase());
+    if(match){
+      currentUser = match;
+      localStorage.setItem("tc_user", match.id);
+      startApp(); return;
+    }
+  }
+  // 2. dernier utilisateur mémorisé sur ce PC
   const saved = localStorage.getItem("tc_user");
-  const people = config.people.filter(p=>p.active!==false);
-  if(saved && people.some(p=>p.id===saved)){
+  if(!forceManual && saved && people.some(p=>p.id===saved)){
     currentUser = personById(saved); startApp(); return;
   }
+  // 3. choix manuel
+  const hint = document.getElementById("login-hint");
+  hint.innerHTML = DETECTED_LOGIN
+    ? `<div class="notice info">Login Windows détecté : <b>${esc(DETECTED_LOGIN)}</b> — non associé à une personne.
+       Un administrateur peut l'associer dans Paramètres → Personnes → colonne « Login Windows ».</div>` : "";
   const sel = document.getElementById("login-select");
   sel.innerHTML = people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
   document.getElementById("ov-login").classList.remove("hidden");
@@ -404,8 +523,10 @@ function showLogin(){
 }
 function startApp(){
   document.getElementById("ov-login").classList.add("hidden");
+  const team = teamById(currentUser.teamId), loc = locById(currentUser.locationId);
   document.getElementById("who").innerHTML =
-    `Connecté : <b>${esc(currentUser.name)}</b> <span class="badge ${currentUser.role}">${currentUser.role==="admin"?"Administrateur":"Membre"}</span>`;
+    `Connecté : <b>${esc(currentUser.name)}</b> <span class="muted">(${esc(team?.name||"—")} · ${esc(loc?.name||"—")})</span>
+     <span class="badge ${currentUser.role}">${currentUser.role==="admin"?"Administrateur":"Membre"}</span>`;
   document.getElementById("mode-indicator").textContent =
     store.mode==="fs" ? `Dossier : ${store.dir.name}` : "⚠ MODE DÉMO — données locales à ce PC";
   renderTabs(); render();
@@ -429,16 +550,16 @@ async function createRequest({personId,type,start,end,half,comment}){
   if(personId!==currentUser.id && !isAdmin()) return alert("Seul un administrateur peut saisir pour quelqu'un d'autre.");
   if(!TYPES[type]) return alert("Type inconnu.");
   if(!start || !end || end<start) return alert("Dates invalides.");
-  const days = openDays(start,end,half);
-  if(days===0) return alert("La période ne contient aucun jour ouvré (week-end / férié).");
-  // chevauchement avec une demande existante non refusée du même type "absent"
+  const person = personById(personId);
+  const days = openDaysP(start,end,half,person);
+  if(days===0) return alert("La période ne contient aucun jour ouvré (week-end / férié du lieu de la personne).");
   const clash = requests.find(r=>r.personId===personId && r.status!=="rejected" &&
       r.start<=end && r.end>=start && (TYPES[r.type].absent===TYPES[type].absent));
   if(clash && !confirm(`Attention : chevauchement avec « ${TYPES[clash.type].label} du ${fmtFr(clash.start)} au ${fmtFr(clash.end)} » (${STATUS[clash.status]}). Continuer ?`)) return;
 
   const auto = !TYPES[type].needsApproval || isAdmin();
   const r = {
-    id:uid(), personId, type, start, end, half: (start===end? half||null : null),
+    id:uid(), personId, type, start, end, half:(start===end? half||null : null),
     comment:comment||"", status: auto?"approved":"pending",
     createdBy: currentUser.id, createdAt: new Date().toISOString(),
     decidedBy: auto?currentUser.id:null, decidedAt: auto?new Date().toISOString():null, decisionComment:"",
@@ -469,17 +590,24 @@ async function removeRequest(id){
   render();
 }
 
-/* ---------- Soldes ---------- */
+/* ---------- Soldes & capacité ---------- */
 function balances(person, year){
   const rs = requests.filter(r=>r.personId===person.id);
-  const sum = (type,status)=> rs.filter(r=>r.type===type && r.status===status)
-                                .reduce((s,r)=>s+openDaysInYear(r,year),0);
+  const sum = (types,status)=> rs.filter(r=>types.includes(r.type) && r.status===status)
+                                 .reduce((s,r)=>s+openDaysInYear(r,year,person),0);
+  const absentTypes = Object.keys(TYPES).filter(k=>TYPES[k].absent);
+  const absApproved = sum(absentTypes,"approved");
+  const open = businessDaysYear(person.locationId, year);
   return {
-    cpTaken: sum("CP","approved"),  cpPending: sum("CP","pending"),
-    rttTaken: sum("RTT","approved"),rttPending: sum("RTT","pending"),
-    cpLeft: (person.cp||0) - sum("CP","approved"),
-    rttLeft: (person.rtt||0) - sum("RTT","approved"),
-    sick: sum("MAL","approved"), abs: sum("ABS","approved"), tt: sum("TT","approved"),
+    cpTaken: sum(["CP"],"approved"),  cpPending: sum(["CP"],"pending"),
+    rttTaken: sum(["RTT"],"approved"),rttPending: sum(["RTT"],"pending"),
+    cpLeft: (person.cp||0) - sum(["CP"],"approved"),
+    rttLeft: (person.rtt||0) - sum(["RTT"],"approved"),
+    sick: sum(["MAL"],"approved"), abs: sum(["ABS"],"approved"), tt: sum(["TT"],"approved"),
+    pendingAll: sum(absentTypes,"pending"),
+    absentAll: absApproved,
+    openYear: open,
+    projWorked: open - absApproved,   // jours travaillés projetés (ouvrés − absences validées)
   };
 }
 
@@ -487,6 +615,13 @@ function balances(person, year){
    Rendu
    ===================================================================== */
 function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function teamOptions(sel, withAll){
+  const opts = config.teams.map(t=>`<option value="${t.id}" ${sel===t.id?"selected":""}>${esc(t.name)}</option>`);
+  return (withAll?`<option value="all" ${sel==="all"?"selected":""}>Toutes les équipes</option>`:"")+opts.join("");
+}
+function locOptions(sel){
+  return config.locations.map(l=>`<option value="${l.id}" ${sel===l.id?"selected":""}>${esc(l.name)}</option>`).join("");
+}
 
 function renderTabs(){
   const tabs = [
@@ -496,7 +631,7 @@ function renderTabs(){
   if(isAdmin()){
     const pend = requests.filter(r=>r.status==="pending").length;
     tabs.push({id:"valid", label:"Validation"+(pend?` (${pend})`:"")});
-    tabs.push({id:"team",  label:"Équipe & soldes"});
+    tabs.push({id:"team",  label:"Équipes & soldes"});
     tabs.push({id:"settings", label:"Paramètres"});
   }
   document.getElementById("tabs").innerHTML = tabs.map(t=>
@@ -516,12 +651,12 @@ function render(){
   bindAfterRender();
 }
 
-/* ---------- Vue : Mon espace ---------- */
+/* ---------- Formulaire de demande (réutilisé) ---------- */
 function requestForm(idPrefix, withPerson){
-  const people = config.people.filter(p=>p.active!==false);
+  const people = activePeople();
   return `
     ${withPerson? `<label>Personne</label>
-      <select id="${idPrefix}-person">${people.map(p=>`<option value="${p.id}" ${p.id===currentUser.id?"selected":""}>${esc(p.name)}</option>`).join("")}</select>`:""}
+      <select id="${idPrefix}-person">${people.map(p=>`<option value="${p.id}" ${p.id===currentUser.id?"selected":""}>${esc(p.name)} (${esc(teamById(p.teamId)?.name||"")})</option>`).join("")}</select>`:""}
     <div class="formgrid">
       <div><label>Type</label>
         <select id="${idPrefix}-type">${Object.entries(TYPES).map(([k,t])=>`<option value="${k}">${t.label}</option>`).join("")}</select></div>
@@ -539,11 +674,12 @@ function requestForm(idPrefix, withPerson){
 }
 function requestRow(r, showPerson){
   const t = TYPES[r.type];
-  const days = openDays(r.start,r.end,r.half);
+  const p = personById(r.personId);
+  const days = p? openDaysP(r.start,r.end,r.half,p) : 0;
   const own = r.personId===currentUser.id;
   const canCancel = isAdmin() || (own && r.status==="pending");
   return `<tr>
-    ${showPerson?`<td>${esc(personById(r.personId)?.name||"?")}</td>`:""}
+    ${showPerson?`<td>${esc(p?.name||"?")}</td>`:""}
     <td><span class="pill" style="background:${t.hex}">${t.label}</span></td>
     <td>${fmtFr(r.start)}${r.start!==r.end?" → "+fmtFr(r.end):""}${r.half?` (${r.half==="AM"?"matin":"après-midi"})`:""}</td>
     <td>${days} j</td>
@@ -553,16 +689,26 @@ function requestRow(r, showPerson){
     <td>${canCancel?`<button class="btn small danger" data-del="${r.id}">✕</button>`:""}</td>
   </tr>`;
 }
+
+/* ---------- Vue : Mon espace ---------- */
 function viewMe(){
   const y = new Date().getFullYear();
   const b = balances(currentUser, y);
   const mine = requests.filter(r=>r.personId===currentUser.id)
                        .sort((a,b)=>b.start.localeCompare(a.start));
-  return `
-  <div class="kpis">
+  const ext = (currentUser.contract||"interne")==="externe";
+  const target = contractTarget(currentUser);
+  const kpis = ext ? `
+    <div class="kpi"><div class="v" style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}">${b.projWorked}</div><div class="l">Jours travaillés projetés ${y} (cible ${target})</div></div>
+    <div class="kpi"><div class="v">${b.absentAll}</div><div class="l">Jours d'absence validés ${y}</div></div>
+  ` : `
     <div class="kpi"><div class="v" style="color:var(--cp)">${b.cpLeft}</div><div class="l">CP restants ${y} (sur ${currentUser.cp||0})</div></div>
     <div class="kpi"><div class="v" style="color:var(--rtt)">${b.rttLeft}</div><div class="l">RTT restants ${y} (sur ${currentUser.rtt||0})</div></div>
-    <div class="kpi"><div class="v" style="color:#f59e0b">${b.cpPending+b.rttPending}</div><div class="l">Jours en attente de validation</div></div>
+  `;
+  return `
+  <div class="kpis">
+    ${kpis}
+    <div class="kpi"><div class="v" style="color:#f59e0b">${b.pendingAll}</div><div class="l">Jours en attente de validation</div></div>
     <div class="kpi"><div class="v" style="color:var(--tt)">${b.tt}</div><div class="l">Jours de télétravail ${y}</div></div>
     <div class="kpi"><div class="v" style="color:var(--mal)">${b.sick+b.abs}</div><div class="l">Maladie / imprévu ${y}</div></div>
   </div>
@@ -571,7 +717,8 @@ function viewMe(){
       <h2>➕ Nouvelle demande</h2>
       ${requestForm("nf", false)}
       <p class="muted" style="margin-top:10px">Congés payés, RTT et congés sans solde sont soumis à validation.
-      Télétravail, arrêt maladie et absence imprévue sont enregistrés directement.</p>
+      Télétravail, arrêt maladie et absence imprévue sont enregistrés directement.
+      Les jours sont décomptés selon les fériés de <b>${esc(locById(currentUser.locationId)?.name||"votre lieu")}</b>.</p>
     </div>
     <div class="card" style="flex:2">
       <h2>📋 Mes demandes & absences</h2>
@@ -585,7 +732,6 @@ function viewMe(){
 
 /* ---------- Vue : Calendrier ---------- */
 function dayInfo(personId, dIso){
-  // priorité : validé > en attente ; absence > télétravail
   const rs = requests.filter(r=>r.personId===personId && r.start<=dIso && r.end>=dIso && r.status!=="rejected");
   if(!rs.length) return null;
   rs.sort((a,b)=> (b.status==="approved")-(a.status==="approved") || (TYPES[b.type].absent)-(TYPES[a.type].absent));
@@ -594,22 +740,26 @@ function dayInfo(personId, dIso){
 function viewCalendar(){
   const y=calYear, m=calMonth;
   const first = new Date(y,m,1), nDays = new Date(y,m+1,0).getDate();
-  const hs = holidaySet();
-  const people = config.people.filter(p=>p.active!==false)
-                   .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  let people = activePeople().sort((a,b)=>
+    (teamById(a.teamId)?.name||"").localeCompare(teamById(b.teamId)?.name||"","fr") ||
+    a.name.localeCompare(b.name,"fr"));
+  if(calTeam!=="all") people = people.filter(p=>p.teamId===calTeam);
   const monthName = first.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  const holByLoc = {};
+  for(const l of config.locations) holByLoc[l.id] = locHolidaySet(l.id);
+
   const daysHead = [];
   for(let d=1; d<=nDays; d++){
     const dt = new Date(y,m,d);
-    const dIso = iso(dt);
-    daysHead.push(`<th title="${hs.has(dIso)?esc(holidayLabel(dIso)):''}">${"DLMMJVS"[dt.getDay()]}<br>${d}</th>`);
+    daysHead.push(`<th>${"DLMMJVS"[dt.getDay()]}<br>${d}</th>`);
   }
   const rows = people.map(p=>{
+    const hs = holByLoc[p.locationId] || new Set();
     const cells=[];
     for(let d=1; d<=nDays; d++){
       const dt=new Date(y,m,d), dIso=iso(dt);
       if(isWeekend(dt)){ cells.push(`<td class="we"></td>`); continue; }
-      if(hs.has(dIso)){ cells.push(`<td class="hol" title="${esc(holidayLabel(dIso)||'Férié')}">F</td>`); continue; }
+      if(hs.has(dIso)){ cells.push(`<td class="hol" title="${esc(locHolidayLabel(p.locationId,dIso)||'Férié')} (${esc(locById(p.locationId)?.name||'')})">F</td>`); continue; }
       const r = dayInfo(p.id,dIso);
       if(!r){ cells.push(`<td></td>`); continue; }
       const t = TYPES[r.type];
@@ -617,15 +767,15 @@ function viewCalendar(){
       cells.push(`<td class="absent ${pend?'pending-cell':''}" style="background:${t.hex}"
         title="${t.label}${pend?' (en attente)':''} — ${esc(p.name)}">${r.type==="TT"?"T":r.type[0]}</td>`);
     }
-    return `<tr><td class="person">${esc(p.name)}</td>${cells.join("")}</tr>`;
+    return `<tr><td class="person">${esc(p.name)}<br><span class="sub">${esc(teamById(p.teamId)?.name||"")} · ${esc(locById(p.locationId)?.name||"")}</span></td>${cells.join("")}</tr>`;
   });
-  // ligne capacité : nb de personnes disponibles (présentes ou en télétravail, validé)
   const capCells=[];
   for(let d=1; d<=nDays; d++){
     const dt=new Date(y,m,d), dIso=iso(dt);
-    if(isWeekend(dt) || hs.has(dIso)){ capCells.push(`<td class="we"></td>`); continue; }
+    if(isWeekend(dt)){ capCells.push(`<td class="we"></td>`); continue; }
     let avail=0;
     for(const p of people){
+      if((holByLoc[p.locationId]||new Set()).has(dIso)) continue; // férié pour cette personne
       const r = dayInfo(p.id,dIso);
       if(!r || r.status!=="approved" || !TYPES[r.type].absent) avail++;
     }
@@ -633,12 +783,13 @@ function viewCalendar(){
   }
   return `
   <div class="card">
-    <div class="actions" style="align-items:center; margin-bottom:12px">
+    <div class="actions" style="margin-bottom:12px">
       <button class="btn small secondary" id="cal-prev">◀</button>
       <b style="min-width:160px; text-align:center; text-transform:capitalize">${monthName}</b>
       <button class="btn small secondary" id="cal-next">▶</button>
       <button class="btn small secondary" id="cal-today">Aujourd'hui</button>
-      <span class="muted">Effectif : ${people.length} — les cases estompées sont en attente de validation.</span>
+      <select id="cal-team" style="max-width:220px">${teamOptions(calTeam,true)}</select>
+      <span class="muted">Effectif affiché : ${people.length} — cases estompées = en attente. Les fériés (F) dépendent du lieu de chacun.</span>
     </div>
     <div class="calwrap">
       <table class="cal">
@@ -649,7 +800,7 @@ function viewCalendar(){
     </div>
     <div class="legend">
       ${Object.entries(TYPES).map(([k,t])=>`<span><span class="sw" style="background:${t.hex}"></span>${t.label} (${k==="TT"?"T":k[0]})</span>`).join("")}
-      <span><span class="sw" style="background:#fde68a"></span>Férié (F)</span>
+      <span><span class="sw" style="background:#fde68a"></span>Férié du lieu (F)</span>
       <span><span class="sw" style="background:#eef1f5"></span>Week-end</span>
     </div>
   </div>`;
@@ -662,14 +813,15 @@ function viewValidation(){
   <div class="card">
     <h2>✅ Demandes en attente de validation</h2>
     ${pend.length? `<div style="overflow-x:auto"><table>
-      <tr><th>Personne</th><th>Type</th><th>Dates</th><th>Jours</th><th>Commentaire</th><th>Demandé le</th><th>Action</th></tr>
+      <tr><th>Personne</th><th>Équipe</th><th>Type</th><th>Dates</th><th>Jours</th><th>Commentaire</th><th>Demandé le</th><th>Action</th></tr>
       ${pend.map(r=>{
         const t=TYPES[r.type], p=personById(r.personId);
         return `<tr>
           <td><b>${esc(p?.name||"?")}</b></td>
+          <td>${esc(teamById(p?.teamId)?.name||"—")}</td>
           <td><span class="pill" style="background:${t.hex}">${t.label}</span></td>
           <td>${fmtFr(r.start)}${r.start!==r.end?" → "+fmtFr(r.end):""}${r.half?` (${r.half==="AM"?"matin":"après-midi"})`:""}</td>
-          <td>${openDays(r.start,r.end,r.half)} j</td>
+          <td>${p?openDaysP(r.start,r.end,r.half,p):"?"} j</td>
           <td>${esc(r.comment||"")}</td>
           <td>${new Date(r.createdAt).toLocaleDateString("fr-FR")}</td>
           <td class="actions">
@@ -697,30 +849,45 @@ function viewValidation(){
   </div>`;
 }
 
-/* ---------- Vue : Équipe (admin) ---------- */
+/* ---------- Vue : Équipes & soldes (admin) ---------- */
 function viewTeam(){
   const y = new Date().getFullYear();
-  const people = config.people.filter(p=>p.active!==false)
-                   .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  let people = activePeople().sort((a,b)=>
+    (teamById(a.teamId)?.name||"").localeCompare(teamById(b.teamId)?.name||"","fr") ||
+    a.name.localeCompare(b.name,"fr"));
+  if(teamViewFilter!=="all") people = people.filter(p=>p.teamId===teamViewFilter);
   return `
   <div class="card">
-    <h2>👥 Soldes de l'équipe — ${y}</h2>
+    <div class="actions" style="margin-bottom:10px">
+      <h2 style="margin:0">👥 Soldes & capacité — ${y}</h2>
+      <select id="team-filter" style="max-width:220px">${teamOptions(teamViewFilter,true)}</select>
+    </div>
     <div style="overflow-x:auto"><table>
-      <tr><th>Personne</th><th>Rôle</th><th>CP pris</th><th>CP en attente</th><th>CP restants</th>
-          <th>RTT pris</th><th>RTT restants</th><th>Maladie</th><th>Imprévus</th><th>Télétravail</th></tr>
+      <tr><th>Personne</th><th>Équipe</th><th>Lieu</th><th>Contrat</th>
+          <th>CP restants</th><th>RTT restants</th><th>En attente</th>
+          <th>Maladie</th><th>Imprévus</th><th>Télétravail</th>
+          <th>Cible j. travaillés</th><th>Projeté</th></tr>
       ${people.map(p=>{
         const b = balances(p,y);
-        return `<tr><td><b>${esc(p.name)}</b></td>
-          <td><span class="badge ${p.role}">${p.role==="admin"?"Admin":"Membre"}</span></td>
-          <td>${b.cpTaken}</td><td>${b.cpPending||"—"}</td><td><b>${b.cpLeft}</b> / ${p.cp||0}</td>
-          <td>${b.rttTaken}</td><td><b>${b.rttLeft}</b> / ${p.rtt||0}</td>
-          <td>${b.sick||"—"}</td><td>${b.abs||"—"}</td><td>${b.tt||"—"}</td></tr>`;
+        const ext = (p.contract||"interne")==="externe";
+        const target = contractTarget(p);
+        return `<tr><td><b>${esc(p.name)}</b> ${p.role==="admin"?'<span class="badge admin">Admin</span>':""}</td>
+          <td>${esc(teamById(p.teamId)?.name||"—")}</td>
+          <td>${esc(locById(p.locationId)?.name||"—")}</td>
+          <td><span class="badge ${p.contract||"interne"}">${CONTRACTS[p.contract||"interne"].label}</span></td>
+          <td>${ext?"—":`<b>${b.cpLeft}</b> / ${p.cp||0}`}</td>
+          <td>${ext?"—":`<b>${b.rttLeft}</b> / ${p.rtt||0}`}</td>
+          <td>${b.pendingAll||"—"}</td>
+          <td>${b.sick||"—"}</td><td>${b.abs||"—"}</td><td>${b.tt||"—"}</td>
+          <td>${target}</td>
+          <td style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}"><b>${b.projWorked}</b></td></tr>`;
       }).join("")}
     </table></div>
-    <div style="margin-top:12px"><button class="btn secondary small" id="btn-export-csv">⬇ Exporter toutes les demandes (CSV)</button></div>
+    <p class="muted" style="margin-top:8px">« Projeté » = jours ouvrés de l'année selon le lieu (${config.locations.map(l=>`${esc(l.name)} : ${businessDaysYear(l.id,y)} j`).join(" · ")}) moins les absences validées.</p>
+    <div style="margin-top:8px"><button class="btn secondary small" id="btn-export-csv">⬇ Exporter toutes les demandes (CSV)</button></div>
   </div>
   <div class="card">
-    <h2>➕ Saisir une absence pour un membre de l'équipe</h2>
+    <h2>➕ Saisir une absence pour un membre</h2>
     <p class="muted">En tant qu'administrateur, votre saisie est validée automatiquement
     (utile pour enregistrer un arrêt maladie ou régulariser un congé).</p>
     ${requestForm("af", true)}
@@ -730,52 +897,98 @@ function viewTeam(){
 /* ---------- Vue : Paramètres (admin) ---------- */
 function viewSettings(){
   const people = [...config.people].sort((a,b)=>a.name.localeCompare(b.name,"fr"));
-  const hols = [...config.holidays].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!settingsLoc || !locById(settingsLoc)) settingsLoc = config.locations[0].id;
+  const loc = locById(settingsLoc);
+  const hols = config.holidays.filter(h=>h.locationId===settingsLoc).sort((a,b)=>a.date.localeCompare(b.date));
+  const gen = HOLGENS[loc.gen||"NONE"];
   const y = new Date().getFullYear();
   return `
+  <div class="card">
+    <h2>👤 Personnes</h2>
+    <div style="overflow-x:auto"><table>
+      <tr><th>Nom</th><th>Login Windows</th><th>Rôle</th><th>Équipe</th><th>Lieu</th><th>Contrat</th>
+          <th>CP/an</th><th>RTT/an</th><th>Cible j.</th><th>Actif</th><th></th></tr>
+      ${people.map(p=>`<tr>
+        <td><input style="min-width:130px" data-pname="${p.id}" value="${esc(p.name)}"></td>
+        <td><input style="min-width:90px" data-plogin="${p.id}" value="${esc(p.winLogin||"")}" placeholder="login"></td>
+        <td><select data-prole="${p.id}"><option value="user" ${p.role==="user"?"selected":""}>Membre</option><option value="admin" ${p.role==="admin"?"selected":""}>Admin</option></select></td>
+        <td><select data-pteam="${p.id}">${teamOptions(p.teamId,false)}</select></td>
+        <td><select data-ploc="${p.id}">${locOptions(p.locationId)}</select></td>
+        <td><select data-pcontract="${p.id}"><option value="interne" ${p.contract!=="externe"?"selected":""}>Interne</option><option value="externe" ${p.contract==="externe"?"selected":""}>Externe</option></select></td>
+        <td><input type="number" step="0.5" min="0" style="width:65px" data-pcp="${p.id}" value="${p.cp||0}"></td>
+        <td><input type="number" step="0.5" min="0" style="width:65px" data-prtt="${p.id}" value="${p.rtt||0}"></td>
+        <td><input type="number" step="1" min="0" style="width:65px" data-ptarget="${p.id}" value="${contractTarget(p)}"></td>
+        <td style="text-align:center"><input type="checkbox" data-pactive="${p.id}" ${p.active!==false?"checked":""}></td>
+        <td>${p.id!==currentUser.id?`<button class="btn small danger" data-pdel="${p.id}" title="Supprimer">✕</button>`:""}</td>
+      </tr>`).join("")}
+    </table></div>
+    <div class="actions" style="margin-top:10px">
+      <input id="np-name" placeholder="Nom du nouveau membre" style="max-width:200px">
+      <input id="np-login" placeholder="Login Windows" style="max-width:140px">
+      <button class="btn small" id="btn-add-person">Ajouter</button>
+      <button class="btn small ok" id="btn-save-people">💾 Enregistrer les modifications</button>
+    </div>
+    <p class="muted" style="margin-top:8px">Le login Windows permet la connexion automatique via <b>Lancer.cmd</b>
+    (la casse est ignorée). Cible j. = jours travaillés attendus dans l'année (par défaut : interne ${CONTRACTS.interne.target}, externe ${CONTRACTS.externe.target}).
+    « Désactiver » (décocher Actif) masque la personne sans perdre son historique.</p>
+  </div>
+
   <div class="row">
     <div class="card">
-      <h2>👤 Personnes</h2>
-      <div style="overflow-x:auto"><table>
-        <tr><th>Nom</th><th>Rôle</th><th>CP/an</th><th>RTT/an</th><th>Actif</th><th></th></tr>
-        ${people.map(p=>`<tr>
-          <td>${esc(p.name)}</td>
-          <td><select data-prole="${p.id}"><option value="user" ${p.role==="user"?"selected":""}>Membre</option><option value="admin" ${p.role==="admin"?"selected":""}>Admin</option></select></td>
-          <td><input type="number" step="0.5" min="0" style="width:70px" data-pcp="${p.id}" value="${p.cp||0}"></td>
-          <td><input type="number" step="0.5" min="0" style="width:70px" data-prtt="${p.id}" value="${p.rtt||0}"></td>
-          <td style="text-align:center"><input type="checkbox" data-pactive="${p.id}" ${p.active!==false?"checked":""}></td>
-          <td>${p.id!==currentUser.id?`<button class="btn small danger" data-pdel="${p.id}" title="Supprimer">✕</button>`:""}</td>
-        </tr>`).join("")}
-      </table></div>
+      <h2>🏢 Équipes</h2>
+      <table>
+        ${config.teams.map(t=>{
+          const n = activePeople().filter(p=>p.teamId===t.id).length;
+          return `<tr><td><input data-tname="${t.id}" value="${esc(t.name)}"></td>
+            <td class="muted">${n} membre(s)</td>
+            <td>${config.teams.length>1 && n===0 ? `<button class="btn small danger" data-tdel="${t.id}">✕</button>`:""}</td></tr>`;
+        }).join("")}
+      </table>
       <div class="actions" style="margin-top:10px">
-        <input id="np-name" placeholder="Nom du nouveau membre" style="max-width:220px">
-        <button class="btn small" id="btn-add-person">Ajouter</button>
-        <button class="btn small ok" id="btn-save-people">💾 Enregistrer les modifications</button>
+        <input id="nt-name" placeholder="Nouvelle équipe" style="max-width:200px">
+        <button class="btn small" id="btn-add-team">Ajouter</button>
+        <button class="btn small ok" id="btn-save-teams">💾 Enregistrer</button>
       </div>
-      <p class="muted" style="margin-top:8px">« Désactiver » (décocher Actif) masque la personne sans perdre son historique.</p>
+      <p class="muted" style="margin-top:8px">Une équipe ne peut être supprimée que si elle n'a plus de membre actif.</p>
     </div>
+
     <div class="card">
-      <h2>🎌 Jours fériés</h2>
+      <h2>🌍 Lieux & jours fériés</h2>
       <div class="actions" style="margin-bottom:10px">
-        <input id="hol-year" type="number" value="${y+1}" style="max-width:100px">
-        <button class="btn small" id="btn-gen-holidays">Générer les fériés France</button>
+        <select id="loc-select" style="max-width:220px">${locOptions(settingsLoc)}</select>
+        <span class="muted">${config.locations.map(l=>esc(l.name)).join(" · ")}</span>
       </div>
+      <div class="actions" style="margin-bottom:10px">
+        <input id="loc-year" type="number" value="${y+1}" style="max-width:100px">
+        <button class="btn small" id="btn-gen-holidays" ${loc.gen && loc.gen!=="NONE"?"":"disabled"}>Générer fériés ${esc(gen.label)}</button>
+      </div>
+      ${gen.note?`<div class="notice">${esc(gen.note)}</div>`:""}
       <div class="actions" style="margin-bottom:10px">
         <input id="hol-date" type="date" style="max-width:160px">
-        <input id="hol-label" placeholder="Libellé (ex : pont)" style="max-width:180px">
+        <input id="hol-label" placeholder="Libellé (ex : pont, Aïd…)" style="max-width:180px">
         <button class="btn small" id="btn-add-holiday">Ajouter</button>
       </div>
-      <div style="max-height:320px; overflow:auto"><table>
+      <div style="max-height:280px; overflow:auto"><table>
         <tr><th>Date</th><th>Libellé</th><th></th></tr>
         ${hols.map(h=>`<tr><td>${fmtFr(h.date)}</td><td>${esc(h.label)}</td>
           <td><button class="btn small danger" data-hdel="${h.date}">✕</button></td></tr>`).join("")}
       </table></div>
+      <h2 style="margin-top:14px">Ajouter un lieu</h2>
+      <div class="actions">
+        <input id="nl-name" placeholder="Nom (ex : Luxembourg)" style="max-width:160px">
+        <select id="nl-gen" style="max-width:230px">${Object.entries(HOLGENS).map(([k,g])=>`<option value="${k}">${g.label}</option>`).join("")}</select>
+        <button class="btn small" id="btn-add-loc">Créer</button>
+      </div>
+      <p class="muted" style="margin-top:8px">Créer un lieu génère ses fériés pour ${y} et ${y+1}. Les lieux inutilisés peuvent être recréés sans risque.</p>
     </div>
   </div>
+
   <div class="card">
-    <h2>💾 Données</h2>
+    <h2>💾 Données & lancement</h2>
     <p class="muted">Mode : <b>${store.mode==="fs"?`dossier partagé « ${esc(store.dir.name)} »`:"démo (localStorage)"}</b>.
     Chaque demande est un fichier JSON individuel dans <code>requests/</code>, la configuration est dans <code>config.json</code>.
+    Pour la connexion automatique, chaque personne doit lancer l'application via <b>Lancer.cmd</b>
+    (fourni à côté de index.html), qui transmet le login Windows.
     Pensez à faire une copie de sauvegarde du dossier de temps en temps.</p>
     <div class="actions" style="margin-top:8px">
       <button class="btn small secondary" id="btn-change-folder">Changer de dossier de données</button>
@@ -785,12 +998,17 @@ function viewSettings(){
 
 /* ---------- CSV ---------- */
 function exportCsv(){
-  const head = "Personne;Type;Debut;Fin;Demi-journee;Jours ouvres;Statut;Commentaire;Cree le;Decide par\n";
-  const lines = requests.sort((a,b)=>a.start.localeCompare(b.start)).map(r=>[
-    personById(r.personId)?.name||"?", TYPES[r.type].label, r.start, r.end, r.half||"",
-    openDays(r.start,r.end,r.half), STATUS[r.status], (r.comment||"").replace(/;/g,","),
-    r.createdAt?.slice(0,10)||"", personById(r.decidedBy)?.name||"",
-  ].join(";"));
+  const head = "Personne;Equipe;Lieu;Contrat;Type;Debut;Fin;Demi-journee;Jours ouvres;Statut;Commentaire;Cree le;Decide par\n";
+  const lines = [...requests].sort((a,b)=>a.start.localeCompare(b.start)).map(r=>{
+    const p = personById(r.personId);
+    return [
+      p?.name||"?", teamById(p?.teamId)?.name||"", locById(p?.locationId)?.name||"",
+      CONTRACTS[p?.contract||"interne"].label,
+      TYPES[r.type].label, r.start, r.end, r.half||"",
+      p?openDaysP(r.start,r.end,r.half,p):"", STATUS[r.status], (r.comment||"").replace(/;/g,","),
+      r.createdAt?.slice(0,10)||"", personById(r.decidedBy)?.name||"",
+    ].join(";");
+  });
   const blob = new Blob(["﻿"+head+lines.join("\n")], {type:"text/csv;charset=utf-8"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -802,19 +1020,21 @@ function exportCsv(){
 function bindForm(prefix, withPerson){
   const submit = document.getElementById(prefix+"-submit");
   if(!submit) return;
+  const who = ()=> withPerson ? personById(document.getElementById(prefix+"-person").value) : currentUser;
   const upd = ()=>{
     const s=document.getElementById(prefix+"-start").value, e=document.getElementById(prefix+"-end").value;
     const h=document.getElementById(prefix+"-half").value||null;
-    if(s && e && e>=s) document.getElementById(prefix+"-days").textContent = openDays(s,e,h)+" jour(s) ouvré(s)";
-    else document.getElementById(prefix+"-days").textContent = "";
-    // si la date de fin est avant le début, l'aligner
     if(s && (!e || e<s)) document.getElementById(prefix+"-end").value = s;
+    const e2=document.getElementById(prefix+"-end").value;
+    document.getElementById(prefix+"-days").textContent =
+      (s && e2 && e2>=s) ? openDaysP(s,e2,h,who())+" jour(s) ouvré(s)" : "";
   };
   ["start","end","half"].forEach(f=>document.getElementById(prefix+"-"+f).onchange=upd);
+  if(withPerson) document.getElementById(prefix+"-person").onchange=upd;
   upd();
   submit.onclick = ()=>{
     createRequest({
-      personId: withPerson? document.getElementById(prefix+"-person").value : currentUser.id,
+      personId: who().id,
       type: document.getElementById(prefix+"-type").value,
       start: document.getElementById(prefix+"-start").value,
       end: document.getElementById(prefix+"-end").value,
@@ -824,6 +1044,7 @@ function bindForm(prefix, withPerson){
   };
 }
 function bindAfterRender(){
+  const q = id=>document.getElementById(id);
   bindForm("nf", false);
   bindForm("af", true);
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.del));
@@ -832,10 +1053,11 @@ function bindAfterRender(){
     const c = prompt("Motif du refus (facultatif) :")||"";
     decide(b.dataset.reject,"rejected",c);
   });
-  const q = id=>document.getElementById(id);
   if(q("cal-prev")) q("cal-prev").onclick = ()=>{ calMonth--; if(calMonth<0){calMonth=11;calYear--;} render(); };
   if(q("cal-next")) q("cal-next").onclick = ()=>{ calMonth++; if(calMonth>11){calMonth=0;calYear++;} render(); };
   if(q("cal-today")) q("cal-today").onclick = ()=>{ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); render(); };
+  if(q("cal-team")) q("cal-team").onchange = e=>{ calTeam=e.target.value; render(); };
+  if(q("team-filter")) q("team-filter").onchange = e=>{ teamViewFilter=e.target.value; render(); };
   if(q("btn-export-csv")) q("btn-export-csv").onclick = exportCsv;
   if(q("btn-change-folder")) q("btn-change-folder").onclick = async ()=>{
     if(!window.showDirectoryPicker) return alert("Indisponible dans ce navigateur.");
@@ -843,62 +1065,116 @@ function bindAfterRender(){
       const h = await window.showDirectoryPicker({mode:"readwrite"});
       await store.connectFolder(h);
       config = await store.loadConfig();
-      if(!config){ document.getElementById("ov-setup").classList.remove("hidden"); showSetup(); return; }
+      if(!config){ showSetup(); return; }
       await reloadData(true); startApp();
     }catch(e){}
   };
-  // Paramètres : personnes
+
+  /* Paramètres : personnes */
   if(q("btn-add-person")) q("btn-add-person").onclick = async ()=>{
     const name = q("np-name").value.trim();
     if(!name) return;
-    config.people.push({id:uid(), name, role:"user", cp:25, rtt:10, active:true});
-    await store.saveConfig(config); toast("Membre ajouté ✓"); render();
+    config.people.push({id:uid(), name, winLogin:q("np-login").value.trim(), role:"user",
+      teamId:config.teams[0].id, locationId:config.locations[0].id,
+      contract:"interne", target:CONTRACTS.interne.target, cp:25, rtt:10, active:true});
+    await store.saveConfig(config); toast("Membre ajouté ✓ — ajustez son équipe/lieu/contrat puis Enregistrer"); render();
   };
+  // changer le contrat pré-remplit la cible si elle valait l'autre défaut
+  document.querySelectorAll("[data-pcontract]").forEach(sel=>sel.onchange=()=>{
+    const tgt = document.querySelector(`[data-ptarget="${sel.dataset.pcontract}"]`);
+    const defs = [String(CONTRACTS.interne.target), String(CONTRACTS.externe.target)];
+    if(tgt && defs.includes(tgt.value)) tgt.value = CONTRACTS[sel.value].target;
+  });
   if(q("btn-save-people")) q("btn-save-people").onclick = async ()=>{
+    const val = (attr,id)=>document.querySelector(`[data-${attr}="${id}"]`);
     for(const p of config.people){
-      const role = document.querySelector(`[data-prole="${p.id}"]`);
-      const cp = document.querySelector(`[data-pcp="${p.id}"]`);
-      const rtt = document.querySelector(`[data-prtt="${p.id}"]`);
-      const act = document.querySelector(`[data-pactive="${p.id}"]`);
-      if(role) p.role = role.value;
-      if(cp) p.cp = parseFloat(cp.value)||0;
-      if(rtt) p.rtt = parseFloat(rtt.value)||0;
-      if(act) p.active = act.checked;
+      const g = a=>val(a,p.id);
+      if(g("pname") && g("pname").value.trim()) p.name = g("pname").value.trim();
+      if(g("plogin")) p.winLogin = g("plogin").value.trim();
+      if(g("prole")) p.role = g("prole").value;
+      if(g("pteam")) p.teamId = g("pteam").value;
+      if(g("ploc")) p.locationId = g("ploc").value;
+      if(g("pcontract")) p.contract = g("pcontract").value;
+      if(g("pcp")) p.cp = parseFloat(g("pcp").value)||0;
+      if(g("prtt")) p.rtt = parseFloat(g("prtt").value)||0;
+      if(g("ptarget")) p.target = parseInt(g("ptarget").value)||CONTRACTS[p.contract].target;
+      if(g("pactive")) p.active = g("pactive").checked;
     }
     if(!config.people.some(p=>p.role==="admin" && p.active!==false))
       return alert("Impossible : il doit rester au moins un administrateur actif.");
+    const logins = config.people.filter(p=>p.winLogin).map(p=>p.winLogin.toLowerCase());
+    const dup = logins.find((l,i)=>logins.indexOf(l)!==i);
+    if(dup) return alert(`Le login Windows « ${dup} » est utilisé par deux personnes.`);
     await store.saveConfig(config);
     currentUser = personById(currentUser.id);
     toast("Modifications enregistrées ✓"); startApp();
   };
   document.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=async ()=>{
     const p = personById(b.dataset.pdel);
-    const has = requests.some(r=>r.personId===p.id);
-    if(has) return alert(`${p.name} a des demandes enregistrées : désactivez la personne (case « Actif ») plutôt que de la supprimer.`);
+    if(requests.some(r=>r.personId===p.id))
+      return alert(`${p.name} a des demandes enregistrées : désactivez la personne (case « Actif ») plutôt que de la supprimer.`);
     if(!confirm(`Supprimer ${p.name} ?`)) return;
     config.people = config.people.filter(x=>x.id!==p.id);
     await store.saveConfig(config); toast("Personne supprimée"); render();
   });
-  // Paramètres : fériés
+
+  /* Paramètres : équipes */
+  if(q("btn-add-team")) q("btn-add-team").onclick = async ()=>{
+    const name = q("nt-name").value.trim();
+    if(!name) return;
+    config.teams.push({id:"t-"+uid(), name});
+    await store.saveConfig(config); toast("Équipe ajoutée ✓"); render();
+  };
+  if(q("btn-save-teams")) q("btn-save-teams").onclick = async ()=>{
+    for(const t of config.teams){
+      const el = document.querySelector(`[data-tname="${t.id}"]`);
+      if(el && el.value.trim()) t.name = el.value.trim();
+    }
+    await store.saveConfig(config); toast("Équipes enregistrées ✓"); render();
+  };
+  document.querySelectorAll("[data-tdel]").forEach(b=>b.onclick=async ()=>{
+    if(config.people.some(p=>p.teamId===b.dataset.tdel && p.active!==false))
+      return alert("Cette équipe a encore des membres actifs.");
+    if(!confirm("Supprimer cette équipe ?")) return;
+    config.teams = config.teams.filter(t=>t.id!==b.dataset.tdel);
+    await store.saveConfig(config); render();
+  });
+
+  /* Paramètres : lieux & fériés */
+  if(q("loc-select")) q("loc-select").onchange = e=>{ settingsLoc=e.target.value; render(); };
   if(q("btn-gen-holidays")) q("btn-gen-holidays").onclick = async ()=>{
-    const y = parseInt(q("hol-year").value);
+    const y = parseInt(q("loc-year").value);
     if(!y || y<2000 || y>2100) return alert("Année invalide.");
-    const existing = new Set(config.holidays.map(h=>h.date));
+    const loc = locById(settingsLoc);
+    const gen = HOLGENS[loc.gen||"NONE"];
+    const existing = new Set(config.holidays.filter(h=>h.locationId===settingsLoc).map(h=>h.date));
     let added=0;
-    for(const h of frenchHolidays(y)) if(!existing.has(h.date)){ config.holidays.push(h); added++; }
-    await store.saveConfig(config); toast(added+" férié(s) ajouté(s)"); render();
+    for(const h of gen.gen(y)) if(!existing.has(h.date)){ config.holidays.push({...h, locationId:settingsLoc}); added++; }
+    await store.saveConfig(config); toast(added+" férié(s) ajouté(s) pour "+loc.name); render();
   };
   if(q("btn-add-holiday")) q("btn-add-holiday").onclick = async ()=>{
     const d = q("hol-date").value, l = q("hol-label").value.trim()||"Férié";
     if(!d) return;
-    if(config.holidays.some(h=>h.date===d)) return alert("Cette date est déjà fériée.");
-    config.holidays.push({date:d,label:l});
+    if(config.holidays.some(h=>h.date===d && h.locationId===settingsLoc)) return alert("Cette date est déjà fériée pour ce lieu.");
+    config.holidays.push({date:d, label:l, locationId:settingsLoc});
     await store.saveConfig(config); toast("Jour ajouté ✓"); render();
   };
   document.querySelectorAll("[data-hdel]").forEach(b=>b.onclick=async ()=>{
-    config.holidays = config.holidays.filter(h=>h.date!==b.dataset.hdel);
+    config.holidays = config.holidays.filter(h=>!(h.date===b.dataset.hdel && h.locationId===settingsLoc));
     await store.saveConfig(config); render();
   });
+  if(q("btn-add-loc")) q("btn-add-loc").onclick = async ()=>{
+    const name = q("nl-name").value.trim();
+    if(!name) return;
+    const genKey = q("nl-gen").value;
+    const id = "l-"+uid();
+    config.locations.push({id, name, gen:genKey});
+    const y = new Date().getFullYear();
+    for(const h of [...HOLGENS[genKey].gen(y), ...HOLGENS[genKey].gen(y+1)])
+      config.holidays.push({...h, locationId:id});
+    settingsLoc = id;
+    await store.saveConfig(config); toast("Lieu créé avec ses fériés ✓"); render();
+  };
 }
 
 /* ---------- Toast ---------- */
