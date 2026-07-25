@@ -292,6 +292,28 @@ const HOLGENS = {
 /* ---------- Organisation de base (créée au premier lancement, modifiable ensuite) ----------
    Format membre : [nom, contrat, lieu, rôle facultatif] */
 const DEFAULT_LOCS = [["Paris","FR"],["Lisbonne","PT"],["Kuala Lumpur","MY"],["Tunis","TN"]];
+/* Trigramme affiché devant le prénom de chaque personne (listes, plannings).
+   Éditable ensuite dans Paramètres → Équipes. */
+const DEFAULT_TRIGRAMS = {
+  "Stability of production":"SOP", "Master Datahub Pricing":"MDP", "Master Datahub Atlas":"MDA",
+  "Casa Datahub":"CDH", "3MS & Pricing project":"3MS", "Transversal":"TRV",
+};
+/* Suggestion automatique de trigramme pour une équipe créée ensuite dans
+   Paramètres (reste éditable) : initiales des mots significatifs, ou les
+   3 premières lettres si un seul mot. */
+function autoTrigram(name){
+  const STOP = new Set(["de","du","des","la","le","les","et","of","the","and","à","a"]);
+  const words = (name||"").trim().split(/\s+/).map(w=>w.replace(/[^a-zA-Z0-9]/g,"")).filter(Boolean);
+  const sig = words.filter(w=>!STOP.has(w.toLowerCase()));
+  const use = sig.length ? sig : words;
+  if(use.length<=1){
+    const base=(use[0]||"EQU").toUpperCase();
+    return (base+"XXX").slice(0,3);
+  }
+  let letters = use.map(w=>w[0]).join("").toUpperCase();
+  if(letters.length<3) letters = (letters+use[0].toUpperCase()).slice(0,3);
+  return letters.slice(0,3);
+}
 const DEFAULT_ORG = [
   {team:"Stability of production", members:[
     ["Mohamed Ali","externe","Paris"], ["Samya","externe","Paris"],
@@ -336,7 +358,7 @@ function buildDefaultConfig(){
     for(const h of HOLGENS[l.gen].gen(yy)) holidays.push({...h, locationId:l.id});
   const teams=[], people=[];
   DEFAULT_ORG.forEach((def,ti)=>{
-    const t = {id:"t"+ti+"-"+uid(), name:def.team};
+    const t = {id:"t"+ti+"-"+uid(), name:def.team, trigram:DEFAULT_TRIGRAMS[def.team]||autoTrigram(def.team)};
     teams.push(t);
     for(const [name,contract,locName,roles] of def.members){
       people.push({id:uid()+Math.random().toString(36).slice(2,5), name, winLogin:"",
@@ -345,7 +367,7 @@ function buildDefaultConfig(){
         cp:contract==="interne"?25:0, rtt:contract==="interne"?10:0, active:true});
     }
   });
-  return {version:4, teams, locations, people, holidays};
+  return {version:5, teams, locations, people, holidays};
 }
 
 /* ---------- État global ---------- */
@@ -371,6 +393,12 @@ const isCdp = () => hasProfile(currentUser, "cdp");
 const uid = () => Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
 const activePeople = () => config.people.filter(p=>p.active!==false);
 const contractTarget = p => p.target ?? CONTRACTS[p.contract||"interne"].target;
+/* Convention d'affichage partout où une liste de personnes apparaît
+   (listes déroulantes, planning, capacity plan) : "TRI-Prénom", trié
+   alphabétiquement sur cette chaîne (donc groupé par équipe). */
+const teamTrigram = teamId => (teamById(teamId)?.trigram) || "???";
+const personLabel = p => `${teamTrigram(p.teamId)}-${p.name}`;
+const sortPeople = list => [...list].sort((a,b)=>personLabel(a).localeCompare(personLabel(b),"fr"));
 
 function locHolidaySet(locId){
   return new Set(config.holidays.filter(h=>h.locationId===locId).map(h=>h.date));
@@ -466,13 +494,13 @@ const store = {
   /* projets : un fichier par projet (allocations incluses) */
   async projectsDir(create){ return await this.dir.getDirectoryHandle("projects",{create:!!create}); },
   async loadProjects(){
-    if(this.mode==="demo") return JSON.parse(localStorage.getItem("tc_projects")||"[]");
+    if(this.mode==="demo") return JSON.parse(localStorage.getItem("tc_projects")||"[]").map(migrateProject);
     const out=[];
     let pd; try{ pd = await this.projectsDir(false); }catch(e){ return out; }
     for await (const [name,h] of pd.entries()){
       if(h.kind==="file" && name.endsWith(".json")){
         const p = await this.readJson(name, pd);
-        if(p && p.id) out.push(p);
+        if(p && p.id) out.push(migrateProject(p));
       }
     }
     return out;
@@ -495,7 +523,8 @@ const store = {
   },
 };
 
-/* Migrations : v1 (mono-équipe) -> v2 (équipes/lieux) -> v3 (profils cumulables) */
+/* Migrations : v1 (mono-équipe) -> v2 (équipes/lieux) -> v3 (profils cumulables)
+   -> v4 (compétence) -> v5 (trigramme d'équipe) */
 function migrate(cfg){
   if(!cfg) return cfg;
   if(cfg.version===undefined || cfg.version<2){
@@ -523,7 +552,20 @@ function migrate(cfg){
     for(const p of cfg.people||[]) if(p.skill===undefined) p.skill = "";
     cfg.version = 4;
   }
+  if(cfg.version<5){
+    for(const t of cfg.teams||[]) if(!t.trigram) t.trigram = DEFAULT_TRIGRAMS[t.name] || autoTrigram(t.name);
+    cfg.version = 5;
+  }
   return cfg;
+}
+/* Migration des projets : ancien teamId/skill unique -> targets[] multiples */
+function migrateProject(p){
+  if(!Array.isArray(p.targets)){
+    p.targets = p.teamId ? [{teamId:p.teamId, skill:p.skill||""}] : [];
+    delete p.teamId; delete p.skill;
+  }
+  if(!Array.isArray(p.workloads)) p.workloads = [];
+  return p;
 }
 
 /* IndexedDB minimal pour mémoriser le dossier choisi entre deux lancements */
@@ -649,7 +691,7 @@ function showLogin(forceManual){
     ? `<div class="notice info">Login Windows détecté : <b>${esc(DETECTED_LOGIN)}</b> — non associé à une personne.
        Un administrateur peut l'associer dans Paramètres → Personnes → colonne « Login Windows ».</div>` : "";
   const sel = document.getElementById("login-select");
-  sel.innerHTML = people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  sel.innerHTML = sortPeople(people).map(p=>`<option value="${p.id}">${esc(personLabel(p))}</option>`).join("");
   document.getElementById("ov-login").classList.remove("hidden");
   document.getElementById("btn-login").onclick = ()=>{
     currentUser = personById(sel.value);
@@ -799,10 +841,10 @@ function render(){
 
 /* ---------- Formulaire de demande (réutilisé) ---------- */
 function requestForm(idPrefix, withPerson){
-  const people = activePeople();
+  const people = sortPeople(activePeople());
   return `
     ${withPerson? `<label>Personne</label>
-      <select id="${idPrefix}-person">${people.map(p=>`<option value="${p.id}" ${p.id===currentUser.id?"selected":""}>${esc(p.name)} (${esc(teamById(p.teamId)?.name||"")})</option>`).join("")}</select>`:""}
+      <select id="${idPrefix}-person">${people.map(p=>`<option value="${p.id}" ${p.id===currentUser.id?"selected":""}>${esc(personLabel(p))}</option>`).join("")}</select>`:""}
     <div class="formgrid">
       <div><label>Type</label>
         <select id="${idPrefix}-type">${Object.entries(TYPES).map(([k,t])=>`<option value="${k}">${t.label}</option>`).join("")}</select></div>
@@ -889,9 +931,7 @@ function dayInfo(personId, dIso){
 function viewCalendar(){
   const y=calYear, m=calMonth;
   const first = new Date(y,m,1), nDays = new Date(y,m+1,0).getDate();
-  let people = activePeople().sort((a,b)=>
-    (teamById(a.teamId)?.name||"").localeCompare(teamById(b.teamId)?.name||"","fr") ||
-    a.name.localeCompare(b.name,"fr"));
+  let people = sortPeople(activePeople());
   if(calTeam!=="all") people = people.filter(p=>p.teamId===calTeam);
   const monthName = first.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
   const holByLoc = {};
@@ -914,9 +954,9 @@ function viewCalendar(){
       const t = TYPES[r.type];
       const pend = r.status==="pending";
       cells.push(`<td class="absent ${pend?'pending-cell':''}" style="background:${t.hex}"
-        title="${t.label}${pend?' (en attente)':''} — ${esc(p.name)}">${r.type==="TT"?"T":r.type[0]}</td>`);
+        title="${t.label}${pend?' (en attente)':''} — ${esc(personLabel(p))}">${r.type==="TT"?"T":r.type[0]}</td>`);
     }
-    return `<tr><td class="person">${esc(p.name)}<br><span class="sub">${esc(teamById(p.teamId)?.name||"")} · ${esc(locById(p.locationId)?.name||"")}</span></td>${cells.join("")}</tr>`;
+    return `<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(locById(p.locationId)?.name||"")} · ${esc(CONTRACTS[p.contract||"interne"].label)}</span></td>${cells.join("")}</tr>`;
   });
   const capCells=[];
   for(let d=1; d<=nDays; d++){
@@ -1093,7 +1133,7 @@ function viewCapacity(){
   }else{
     let members = activePeople().filter(p=>p.teamId===capTeam);
     if(capSkill!=="all") members = members.filter(p=>(p.skill||"").trim()===capSkill);
-    members.sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+    members = sortPeople(members);
     totals = sumMonths(members, remainFn);
     pendTot = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
     smoothTot = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
@@ -1102,7 +1142,7 @@ function viewCapacity(){
       const vals = [...Array(12)].map((_,m)=>personMonthRemaining(p,y,m,capSmooth));
       const pends = [...Array(12)].map((_,m)=>personMonthAbsent(p,y,m,"pending"));
       const smooths = [...Array(12)].map((_,m)=>personMonthSmoothLeave(p,y,m));
-      rows.push(mkRow(p.name,
+      rows.push(mkRow(personLabel(p),
         `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}${p.skill?` · ${p.skill}`:""}`,
         vals, pends, capSmooth?smooths:null));
     }
@@ -1149,23 +1189,54 @@ function projectOverloads(y){
   for(const p of activePeople()){
     for(let m=0;m<12;m++){
       const pct = personMonthAllocPct(p,y,m);
-      if(pct>100) out.push(`${p.name} — ${monthName(y,m,false)} ${y} : ${pct} % affectés (tous projets)`);
+      if(pct>100) out.push(`${personLabel(p)} — ${monthName(y,m,false)} ${y} : ${pct} % affectés (tous projets)`);
     }
   }
   return out;
+}
+function targetLabel(t){ return `${teamById(t.teamId)?.name||"—"}${t.skill?" · "+t.skill:" (toutes compétences)"}`; }
+function projectTargetSkills(pr){
+  const set = new Set();
+  for(const t of pr.targets||[]){ if(t.skill) set.add(t.skill); for(const s of teamSkills(t.teamId)) set.add(s); }
+  return [...set].sort((a,b)=>a.localeCompare(b,"fr"));
+}
+/* Capacité planifiée SUR CE PROJET pour les personnes d'une compétence donnée
+   (vide = toutes), du mois courant jusqu'au mois de la date de fin incluse. */
+function workloadCalc(pr, w){
+  if(!w.dueDate || w.dueDate<todayIso()) return {planned:0, months:0, overdue:true};
+  const dd = fromIso(w.dueDate);
+  let y=now.getFullYear(), m=now.getMonth();
+  const yEnd=dd.getFullYear(), mEnd=dd.getMonth();
+  let planned=0, months=0;
+  const peopleIds = Object.keys(pr.allocations||{});
+  while(y<yEnd || (y===yEnd && m<=mEnd)){
+    months++;
+    for(const pid of peopleIds){
+      const p = personById(pid); if(!p) continue;
+      if(w.skill && (p.skill||"").trim()!==w.skill) continue;
+      const key=`${y}-${pad(m+1)}`;
+      const pct=(pr.allocations[pid]||{})[key]||0;
+      if(pct>0) planned += personMonthOpen(p,y,m)*pct/100;
+    }
+    m++; if(m>11){m=0;y++;}
+    if(months>60) break;
+  }
+  return {planned, months, overdue:false};
 }
 function viewProjects(){
   const y = projYear;
   const pr = projects.find(p=>p.id===projSel);
   const list = [...projects].sort((a,b)=>a.name.localeCompare(b.name,"fr"));
   const listHtml = list.length ? `<div style="overflow-x:auto"><table>
-    <tr><th>Projet</th><th>Équipe</th><th>Compétence</th><th>Personnes affectées</th><th>Actif</th><th></th></tr>
+    <tr><th>Projet</th><th>Cibles équipe/compétence</th><th>Personnes affectées</th><th>Actif</th><th></th></tr>
     ${list.map(p=>{
       const n = Object.keys(p.allocations||{}).length;
+      const chips = (p.targets||[]).map(t=>
+        `<span class="sw" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${teamColor(t.teamId)};margin-right:3px"></span>${esc(targetLabel(t))}`
+      ).join("<br>") || "—";
       return `<tr ${p.id===projSel?'style="background:#eff6ff"':''}>
         <td><b>${esc(p.name)}</b></td>
-        <td><span class="sw" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${teamColor(p.teamId)};margin-right:5px"></span>${esc(teamById(p.teamId)?.name||"—")}</td>
-        <td>${esc(p.skill||"—")}</td>
+        <td>${chips}</td>
         <td>${n||"—"}</td>
         <td style="text-align:center"><input type="checkbox" data-pract="${p.id}" ${p.active!==false?"checked":""}></td>
         <td class="actions">
@@ -1181,25 +1252,23 @@ function viewProjects(){
     <div class="actions">
       <input id="proj-new-name" placeholder="Nom du projet" style="max-width:220px">
       <select id="proj-new-team" style="max-width:220px">${teamOptions(config.teams[0].id,false)}</select>
-      <input id="proj-new-skill" list="proj-skill-dl" placeholder="Compétence visée" style="max-width:180px">
+      <input id="proj-new-skill" list="proj-skill-dl" placeholder="Compétence visée (optionnel)" style="max-width:200px">
       <datalist id="proj-skill-dl">${newSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
       <button class="btn small" id="btn-add-proj">Créer</button>
     </div>
     <p class="muted" style="margin-top:6px">La compétence est proposée d'après celles des membres de l'équipe choisie
-    (renseignées dans Paramètres → Personnes), mais reste libre.</p>`;
+    (renseignées dans Paramètres → Personnes), mais reste libre ; laissez vide pour viser toute l'équipe.
+    D'autres cibles équipe/compétence pourront être ajoutées ensuite dans l'éditeur du projet.</p>`;
 
   let editorHtml = "";
   if(pr){
-    const allocated = Object.keys(pr.allocations||{}).map(personById).filter(Boolean)
-      .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
-    const addable = activePeople().filter(p=>!(pr.allocations||{})[p.id])
-      .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
-    const groupMembers = activePeople().filter(p=>p.teamId===pr.teamId && (!pr.skill || (p.skill||"").trim()===pr.skill));
+    const allocated = sortPeople(Object.keys(pr.allocations||{}).map(personById).filter(Boolean));
+    const addable = sortPeople(activePeople().filter(p=>!(pr.allocations||{})[p.id]));
     const defStartM = y===now.getFullYear() ? now.getMonth() : 0;
     const monthOpts = sel=>[...Array(12)].map((_,m)=>`<option value="${m}" ${m===sel?"selected":""}>${monthName(y,m,false)}</option>`).join("");
     const rows = allocated.map(p=>{
       const a = pr.allocations[p.id]||{};
-      return `<tr><td class="person">${esc(p.name)}<br><span class="sub">${esc(teamById(p.teamId)?.name||"")} · ${esc(p.skill||"—")}</span></td>
+      return `<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(teamById(p.teamId)?.name||"")} · ${esc(p.skill||"—")}</span></td>
         ${[...Array(12)].map((_,m)=>{
           const key=`${y}-${pad(m+1)}`;
           return `<td><input type="number" min="0" max="100" step="5" style="width:52px; text-align:right"
@@ -1208,41 +1277,100 @@ function viewProjects(){
         <td><button class="btn small danger" data-arem="${p.id}" title="Retirer du projet">✕</button></td></tr>`;
     }).join("");
     const overloads = projectOverloads(y);
+    const targets = pr.targets||[];
+    const targetsRows = targets.map((t,i)=>`<tr><td>${esc(teamById(t.teamId)?.name||"—")}</td>
+      <td>${esc(t.skill||"(toutes compétences)")}</td>
+      <td><button class="btn small danger" data-tgtdel="${i}">✕</button></td></tr>`).join("");
+    const tSkills = teamSkills(config.teams[0].id);
+    const bulkOptions = targets.map((t,i)=>`<option value="${i}">${esc(targetLabel(t))}</option>`).join("");
+    const wSkills = projectTargetSkills(pr);
+    const workloadRows = (pr.workloads||[]).map((w,i)=>{
+      const c = workloadCalc(pr,w);
+      const shortfall = w.remainingDays - c.planned;
+      const reqPace = c.months>0 ? w.remainingDays/c.months : null;
+      const planPace = c.months>0 ? c.planned/c.months : 0;
+      const verdict = c.overdue ? `<span class="pill st-rejected">Date dépassée</span>`
+        : (shortfall<=0.001 ? `<span class="pill st-approved">✅ Tenable</span>`
+                             : `<span class="pill st-rejected">⚠ Manque ${fmtDays(shortfall)} j-p</span>`);
+      return `<tr>
+        <td>${esc(w.skill||"(toutes compétences)")}</td>
+        <td><input type="number" min="0" step="0.5" style="width:80px" data-wldays="${i}" value="${w.remainingDays}"></td>
+        <td><input type="date" style="width:150px" data-wldue="${i}" value="${w.dueDate}"></td>
+        <td>${fmtDays(c.planned)} j-p${!c.overdue?` <span class="muted">(${c.months} mois)</span>`:""}</td>
+        <td>${reqPace!=null?fmtDays(reqPace)+" j/mois":"—"}</td>
+        <td>${fmtDays(planPace)} j/mois</td>
+        <td>${verdict}</td>
+        <td><button class="btn small danger" data-wldel="${i}" title="Supprimer">✕</button></td>
+      </tr>`;
+    }).join("");
     editorHtml = `
     <div class="card">
       <div class="actions" style="margin-bottom:10px">
-        <h2 style="margin:0">🗓 Affectations — ${esc(pr.name)}
-          <span class="muted">(${esc(teamById(pr.teamId)?.name||"")}${pr.skill?" · "+esc(pr.skill):""})</span></h2>
+        <h2 style="margin:0">🗓 Affectations — ${esc(pr.name)}</h2>
         <button class="btn small secondary" id="proj-prev">◀</button>
         <b>${y}</b>
         <button class="btn small secondary" id="proj-next">▶</button>
         <button class="btn small secondary" id="proj-close">Fermer</button>
       </div>
+
+      <h3>Cibles équipe / compétence</h3>
+      <table>
+        <tr><th>Équipe</th><th>Compétence</th><th></th></tr>
+        ${targetsRows || `<tr><td colspan="3" class="muted">Aucune cible pour l'instant.</td></tr>`}
+      </table>
+      <div class="actions" style="margin-top:8px">
+        <select id="tgt-new-team" style="max-width:220px">${teamOptions(config.teams[0].id,false)}</select>
+        <input id="tgt-new-skill" list="tgt-skill-dl" placeholder="Compétence (optionnel)" style="max-width:200px">
+        <datalist id="tgt-skill-dl">${tSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
+        <button class="btn small" id="btn-add-target">Ajouter une cible</button>
+      </div>
+      <p class="muted" style="margin-top:6px">Un projet peut viser plusieurs équipes et/ou compétences ; chacune
+      peut ensuite être affectée en groupe ci-dessous.</p>
+
+      <h3 style="margin-top:20px">Personnes affectées</h3>
       ${allocated.length? `<div class="calwrap"><table class="cal">
         <tr><th class="person">Personne</th>${[...Array(12)].map((_,m)=>`<th>${monthName(y,m,true)}</th>`).join("")}<th></th></tr>
         ${rows}
       </table></div>` : `<p class="muted">Aucune personne affectée pour l'instant.</p>`}
       <div class="actions" style="margin-top:10px">
         <select id="proj-person-sel" style="max-width:240px">
-          ${addable.map(p=>`<option value="${p.id}">${esc(p.name)} (${esc(teamById(p.teamId)?.name||"")})</option>`).join("")}
+          ${addable.map(p=>`<option value="${p.id}">${esc(personLabel(p))}</option>`).join("")}
         </select>
         <button class="btn small" id="proj-add-person" ${addable.length?"":"disabled"}>Ajouter la personne</button>
         <button class="btn small ok" id="btn-save-alloc" ${allocated.length?"":"disabled"}>💾 Enregistrer les affectations</button>
       </div>
       <p class="muted" style="margin-top:8px">Affectation en % du temps de la personne, mois par mois — utile pour les
-      personnes transverses réparties sur plusieurs projets. Vide = 0 %. La capacité restante (onglet Capacity plan)
-      déduit ces affectations.</p>
+      personnes transverses réparties sur plusieurs projets, y compris hors des équipes ciblées. Vide = 0 %.
+      La capacité restante (onglet Capacity plan) déduit ces affectations.</p>
       ${overloads.length? `<div class="notice err" style="margin-top:8px"><b>Surcharge (&gt;100 % tous projets confondus) :</b><br>${overloads.map(esc).join("<br>")}</div>`:""}
 
-      <h3 style="margin-top:16px">Affectation groupée — toute l'équipe/compétence du projet</h3>
-      <p class="muted">Affecte en une fois le même % à ${groupMembers.length? esc(groupMembers.length+" personne(s) actives") : "aucune personne active"}
-      correspondant à ${esc(teamById(pr.teamId)?.name||"")}${pr.skill?" · "+esc(pr.skill):" (toutes compétences)"},
-      sur la période choisie. Chaque personne reste ensuite modifiable individuellement ci-dessus.</p>
+      <h3 style="margin-top:20px">Affectation groupée — une cible équipe/compétence entière</h3>
+      ${targets.length? `<p class="muted">Affecte en une fois le même % à toutes les personnes actives correspondant à la cible choisie,
+      sur la période sélectionnée. Chaque personne reste ensuite modifiable individuellement ci-dessus.</p>
       <div class="actions">
-        <span class="muted">De</span> <select id="bulk-start-m" style="max-width:120px">${monthOpts(defStartM)}</select>
+        <select id="bulk-target" style="max-width:260px">${bulkOptions}</select>
+        <span class="muted">de</span> <select id="bulk-start-m" style="max-width:120px">${monthOpts(defStartM)}</select>
         <span class="muted">à</span> <select id="bulk-end-m" style="max-width:120px">${monthOpts(11)}</select>
         <span class="muted">%</span> <input type="number" id="bulk-pct" min="0" max="100" step="5" value="20" style="width:70px">
-        <button class="btn small" id="btn-bulk-alloc" ${groupMembers.length?"":"disabled"}>Affecter le groupe</button>
+        <button class="btn small" id="btn-bulk-alloc">Affecter le groupe</button>
+      </div>` : `<p class="muted">Ajoutez au moins une cible équipe/compétence ci-dessus pour affecter un groupe entier.</p>`}
+
+      <h3 style="margin-top:20px">Charge & délais (projection de capacité)</h3>
+      <p class="muted">Pour chaque compétence, indiquez la charge restante (en jours-personnes) et la date de fin
+      souhaitée : l'application compare la capacité déjà planifiée sur ce projet d'ici cette date à la charge à
+      réaliser, pour vérifier si le délai est tenable au rythme d'affectation actuel.</p>
+      ${(pr.workloads||[]).length? `<div style="overflow-x:auto"><table>
+        <tr><th>Compétence</th><th>Charge restante (j-p)</th><th>Date de fin</th><th>Capacité planifiée</th>
+            <th>Rythme requis</th><th>Rythme planifié</th><th>Verdict</th><th></th></tr>
+        ${workloadRows}
+      </table></div>` : `<p class="muted">Aucune ligne de charge pour l'instant.</p>`}
+      <div class="actions" style="margin-top:8px">
+        <input id="wl-skill" list="wl-skill-dl" placeholder="Compétence" style="max-width:180px">
+        <datalist id="wl-skill-dl">${wSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
+        <input type="number" id="wl-days" min="0" step="0.5" placeholder="Charge restante (j-p)" style="max-width:170px">
+        <input type="date" id="wl-due" style="max-width:160px">
+        <button class="btn small" id="btn-add-workload">Ajouter la ligne</button>
+        <button class="btn small ok" id="btn-save-workloads" ${(pr.workloads||[]).length?"":"disabled"}>💾 Enregistrer les charges</button>
       </div>
     </div>`;
   }
@@ -1250,7 +1378,7 @@ function viewProjects(){
   return `
   <div class="card">
     <h2>📁 Projets</h2>
-    <p class="muted" style="margin-bottom:10px">Un projet vise une équipe et une compétence de celle-ci ;
+    <p class="muted" style="margin-bottom:10px">Un projet peut viser plusieurs équipes et/ou compétences ;
     les affectations peuvent néanmoins inclure des personnes d'autres équipes (transverses).</p>
     ${listHtml}
     ${createHtml}
@@ -1304,9 +1432,7 @@ function viewValidation(){
 /* ---------- Vue : Équipes & soldes (admin) ---------- */
 function viewTeam(){
   const y = new Date().getFullYear();
-  let people = activePeople().sort((a,b)=>
-    (teamById(a.teamId)?.name||"").localeCompare(teamById(b.teamId)?.name||"","fr") ||
-    a.name.localeCompare(b.name,"fr"));
+  let people = sortPeople(activePeople());
   if(teamViewFilter!=="all") people = people.filter(p=>p.teamId===teamViewFilter);
   return `
   <div class="card">
@@ -1323,7 +1449,7 @@ function viewTeam(){
         const b = balances(p,y);
         const ext = (p.contract||"interne")==="externe";
         const target = contractTarget(p);
-        return `<tr><td><b>${esc(p.name)}</b>
+        return `<tr><td><b>${esc(personLabel(p))}</b>
           ${(p.roles||[]).includes("admin")?'<span class="badge admin">Admin</span>':""}
           ${(p.roles||[]).includes("cdp")?'<span class="badge cdp">CdP</span>':""}</td>
           <td>${esc(teamById(p.teamId)?.name||"—")}</td>
@@ -1350,7 +1476,7 @@ function viewTeam(){
 
 /* ---------- Vue : Paramètres (admin) ---------- */
 function viewSettings(){
-  const people = [...config.people].sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  const people = sortPeople(config.people);
   if(!settingsLoc || !locById(settingsLoc)) settingsLoc = config.locations[0].id;
   const loc = locById(settingsLoc);
   const hols = config.holidays.filter(h=>h.locationId===settingsLoc).sort((a,b)=>a.date.localeCompare(b.date));
@@ -1400,19 +1526,24 @@ function viewSettings(){
     <div class="card">
       <h2>🏢 Équipes</h2>
       <table>
+        <tr><th>Nom</th><th>Trigramme</th><th></th><th></th></tr>
         ${config.teams.map(t=>{
           const n = activePeople().filter(p=>p.teamId===t.id).length;
           return `<tr><td><input data-tname="${t.id}" value="${esc(t.name)}"></td>
+            <td><input data-ttrigram="${t.id}" value="${esc(t.trigram||"")}" maxlength="4" style="width:70px; text-transform:uppercase"></td>
             <td class="muted">${n} membre(s)</td>
             <td>${config.teams.length>1 && n===0 ? `<button class="btn small danger" data-tdel="${t.id}">✕</button>`:""}</td></tr>`;
         }).join("")}
       </table>
       <div class="actions" style="margin-top:10px">
         <input id="nt-name" placeholder="Nouvelle équipe" style="max-width:200px">
+        <input id="nt-trigram" placeholder="Trigramme" style="max-width:90px; text-transform:uppercase">
         <button class="btn small" id="btn-add-team">Ajouter</button>
         <button class="btn small ok" id="btn-save-teams">💾 Enregistrer</button>
       </div>
-      <p class="muted" style="margin-top:8px">Une équipe ne peut être supprimée que si elle n'a plus de membre actif.</p>
+      <p class="muted" style="margin-top:8px">Le trigramme précède le prénom partout où les personnes sont listées
+      (ex : « ${esc(config.teams[0]?.trigram||"ABC")}-${esc((activePeople().find(p=>p.teamId===config.teams[0]?.id)||{name:"Prénom"}).name)} »).
+      Une équipe ne peut être supprimée que si elle n'a plus de membre actif.</p>
     </div>
 
     <div class="card">
@@ -1535,11 +1666,13 @@ function bindAfterRender(){
     if(!isCdp()) return;
     const name = q("proj-new-name").value.trim();
     if(!name) return;
-    const p = {id:uid(), name, teamId:q("proj-new-team").value, skill:q("proj-new-skill").value.trim(),
-               active:true, allocations:{}, createdBy:currentUser.id, createdAt:new Date().toISOString()};
+    const p = {id:uid(), name,
+               targets:[{teamId:q("proj-new-team").value, skill:q("proj-new-skill").value.trim()}],
+               active:true, allocations:{}, workloads:[],
+               createdBy:currentUser.id, createdAt:new Date().toISOString()};
     await store.saveProject(p);
     projects.push(p); projSel = p.id;
-    toast("Projet créé ✓ — ajoutez les personnes affectées"); render();
+    toast("Projet créé ✓ — ajoutez d'autres cibles, les personnes affectées et la charge restante"); render();
   };
   document.querySelectorAll("[data-popen]").forEach(b=>b.onclick=()=>{ projSel=b.dataset.popen; render(); });
   document.querySelectorAll("[data-pdel-proj]").forEach(b=>b.onclick=async ()=>{
@@ -1590,11 +1723,12 @@ function bindAfterRender(){
   if(q("btn-bulk-alloc")) q("btn-bulk-alloc").onclick = async ()=>{
     if(!isCdp()) return;
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    const target = (pr.targets||[])[parseInt(q("bulk-target").value)]; if(!target) return;
     const startM = parseInt(q("bulk-start-m").value), endM = parseInt(q("bulk-end-m").value);
     const pct = Math.max(0, Math.min(100, parseInt(q("bulk-pct").value)||0));
     if(endM<startM) return alert("Le mois de fin doit être après le mois de début.");
-    const members = activePeople().filter(p=>p.teamId===pr.teamId && (!pr.skill || (p.skill||"").trim()===pr.skill));
-    if(!members.length) return alert("Aucune personne active ne correspond à cette équipe/compétence.");
+    const members = activePeople().filter(p=>p.teamId===target.teamId && (!target.skill || (p.skill||"").trim()===target.skill));
+    if(!members.length) return alert("Aucune personne active ne correspond à cette cible.");
     pr.allocations = pr.allocations||{};
     for(const p of members){
       pr.allocations[p.id] = pr.allocations[p.id]||{};
@@ -1606,6 +1740,52 @@ function bindAfterRender(){
     await store.saveProject(pr);
     toast(`${members.length} personne(s) affectée(s) à ${pct} % ✓`); render();
   };
+  if(q("btn-add-target")) q("btn-add-target").onclick = async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    pr.targets = pr.targets||[];
+    pr.targets.push({teamId:q("tgt-new-team").value, skill:q("tgt-new-skill").value.trim()});
+    await store.saveProject(pr);
+    toast("Cible ajoutée ✓"); render();
+  };
+  document.querySelectorAll("[data-tgtdel]").forEach(b=>b.onclick=async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    pr.targets.splice(parseInt(b.dataset.tgtdel),1);
+    await store.saveProject(pr); render();
+  });
+  if(q("btn-add-workload")) q("btn-add-workload").onclick = async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    const skill = q("wl-skill").value.trim();
+    const days = Math.max(0, parseFloat(q("wl-days").value)||0);
+    const due = q("wl-due").value;
+    if(!due) return alert("Choisissez une date de fin souhaitée.");
+    pr.workloads = pr.workloads||[];
+    pr.workloads.push({skill, remainingDays:days, dueDate:due});
+    await store.saveProject(pr);
+    toast("Ligne de charge ajoutée ✓"); render();
+  };
+  if(q("btn-save-workloads")) q("btn-save-workloads").onclick = async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    document.querySelectorAll("[data-wldays]").forEach(inp=>{
+      const i = parseInt(inp.dataset.wldays);
+      if(pr.workloads[i]) pr.workloads[i].remainingDays = Math.max(0, parseFloat(inp.value)||0);
+    });
+    document.querySelectorAll("[data-wldue]").forEach(inp=>{
+      const i = parseInt(inp.dataset.wldue);
+      if(pr.workloads[i] && inp.value) pr.workloads[i].dueDate = inp.value;
+    });
+    await store.saveProject(pr);
+    toast("Charges enregistrées ✓"); render();
+  };
+  document.querySelectorAll("[data-wldel]").forEach(b=>b.onclick=async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    pr.workloads.splice(parseInt(b.dataset.wldel),1);
+    await store.saveProject(pr); render();
+  });
   if(q("team-filter")) q("team-filter").onchange = e=>{ teamViewFilter=e.target.value; render(); };
   if(q("btn-export-csv")) q("btn-export-csv").onclick = exportCsv;
   if(q("btn-change-folder")) q("btn-change-folder").onclick = async ()=>{
@@ -1676,13 +1856,16 @@ function bindAfterRender(){
   if(q("btn-add-team")) q("btn-add-team").onclick = async ()=>{
     const name = q("nt-name").value.trim();
     if(!name) return;
-    config.teams.push({id:"t-"+uid(), name});
+    const trigram = (q("nt-trigram").value.trim() || autoTrigram(name)).toUpperCase().slice(0,4);
+    config.teams.push({id:"t-"+uid(), name, trigram});
     await store.saveConfig(config); toast("Équipe ajoutée ✓"); render();
   };
   if(q("btn-save-teams")) q("btn-save-teams").onclick = async ()=>{
     for(const t of config.teams){
       const el = document.querySelector(`[data-tname="${t.id}"]`);
       if(el && el.value.trim()) t.name = el.value.trim();
+      const tel = document.querySelector(`[data-ttrigram="${t.id}"]`);
+      if(tel && tel.value.trim()) t.trigram = tel.value.trim().toUpperCase().slice(0,4);
     }
     await store.saveConfig(config); toast("Équipes enregistrées ✓"); render();
   };

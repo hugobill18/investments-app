@@ -70,6 +70,19 @@ Les jours sont décomptés en **jours ouvrés selon le lieu de la personne** :
 un 14 juillet est férié pour Paris mais ouvré pour Kuala Lumpur, et
 inversement pour le Federal Territory Day.
 
+### Affichage des personnes : trigramme d'équipe
+
+Partout où une liste de personnes apparaît (listes déroulantes, écran de
+connexion, calendrier équipe, capacity plan, affectations projet), le nom
+est affiché sous la forme **`TRI-Prénom`** (trigramme de l'équipe, tiret,
+prénom), trié alphabétiquement sur cette chaîne — donc groupé par équipe
+puis par ordre alphabétique à l'intérieur. Le trigramme de chaque équipe se
+définit et se modifie dans Paramètres → Équipes (une suggestion est
+proposée automatiquement pour les équipes créées ensuite, mais reste
+éditable). Trigrammes de l'organisation de base : SOP (Stability of
+production), MDP (Master Datahub Pricing), MDA (Master Datahub Atlas), CDH
+(Casa Datahub), 3MS (3MS & Pricing project), TRV (Transversal).
+
 ### Profils (cumulables)
 
 Chaque personne peut cumuler plusieurs profils, gérés par les admins dans
@@ -114,16 +127,17 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
 
 ### Projets & affectations (profil Chef de projet)
 
-- Un projet vise une **équipe** et une **compétence** de celle-ci (la
-  compétence de chaque personne se renseigne dans Paramètres → Personnes,
-  en texte libre).
-- Deux façons d'affecter, combinables :
-  - **Affectation groupée** : un même % sur une période donnée pour toutes
-    les personnes actives de l'équipe/compétence visée par le projet, en un
-    clic (bloc « Affectation groupée » de l'éditeur) ;
+- Un projet peut viser **plusieurs cibles équipe/compétence** (bloc « Cibles
+  équipe / compétence » de l'éditeur — en ajouter, en retirer ; laisser la
+  compétence vide vise toute l'équipe). Il est créé avec une première cible,
+  les suivantes s'ajoutent ensuite.
+- Deux façons d'affecter des personnes, combinables :
+  - **Affectation groupée** : on choisit UNE des cibles du projet, un % et
+    une période, appliqués en un clic à toutes les personnes actives
+    correspondantes ;
   - **Affectation individuelle** : par personne, par mois, en % du temps —
     une personne (notamment transverse) peut être répartie sur plusieurs
-    projets et venir d'une autre équipe que celle du projet. Modifiable
+    projets et venir d'une équipe hors des cibles du projet. Modifiable
     après une affectation groupée pour ajuster cas par cas.
 - Le **% restant non affecté** d'une personne reste disponible pour sa
   propre équipe (c'est exactement ce que montre le capacity plan : la
@@ -133,6 +147,14 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   dans le capacity plan — l'application avertit mais ne bloque pas la
   saisie, à vous de trancher. Décocher « Actif » suspend un projet sans
   perdre ses affectations.
+- **Charge & délais** : pour chaque compétence du projet, indiquez la
+  **charge restante** (en jours-personnes) et la **date de fin souhaitée**.
+  L'application calcule, à partir des personnes déjà affectées sur ce
+  projet (filtrées par cette compétence), la capacité planifiée d'ici cette
+  date, le rythme mensuel requis pour tenir le délai, le rythme
+  actuellement planifié, et un verdict (✅ Tenable / ⚠ Manque X j-p / Date
+  dépassée) — de quoi projeter la capacité des mois à venir et vérifier que
+  le délai est réaliste avant de s'engager.
 - Stockage : un fichier JSON par projet (`projects/proj_*.json`), même
   logique anti-conflits que les demandes.
 
