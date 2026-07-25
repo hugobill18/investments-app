@@ -1,10 +1,15 @@
 # Capacité Équipe — gestion des congés & absences sans serveur
 
+> **L'interface de l'application (`index.html`) est entièrement en anglais**
+> (tout le monde dans l'équipe ne parle pas français) — ce README reste en
+> français pour vous, mais mentionne entre parenthèses le libellé anglais
+> exact affiché à l'écran, ex. « Paramètres (**Settings**) ».
+
 Application **monofichier** (`index.html`) de gestion de la capacité de plusieurs
 équipes : congés payés, RTT, télétravail, arrêts maladie, absences imprévues,
-jours fériés **par lieu de travail**, soldes restants par personne, ressources
-internes/externes avec cible de jours travaillés, et circuit de validation par
-des administrateurs.
+formations, jours fériés **par lieu de travail**, soldes restants par personne,
+ressources internes/externes avec cible de jours travaillés, date de fin de
+contrat, et circuit de validation par des administrateurs.
 
 Elle a été conçue pour une contrainte précise : **aucun hébergement, aucune
 installation** sur les postes. Elle fonctionne intégralement dans le navigateur
@@ -25,22 +30,24 @@ sur chaque poste.
    Capacité Équipe/
    ├── index.html      ← l'application
    ├── Lancer.cmd      ← lanceur (transmet le login Windows)
-   └── donnees/        ← le dossier de données (sera rempli automatiquement)
+   └── data/           ← le dossier de données (sera rempli automatiquement)
    ```
 3. Double-cliquez sur `Lancer.cmd` (ou sur `index.html`).
-4. Cliquez sur **« Choisir le dossier de données »**, sélectionnez `donnees/`
+4. Cliquez sur **« Choose the data folder »**, sélectionnez `data/`
    et autorisez l'accès en lecture/écriture quand Edge le demande.
 5. L'assistant crée l'**organisation de base** définie dans `index.html`
    (constante `DEFAULT_ORG`) : les équipes Stability of production, Master
    Datahub Pricing, Master Datahub Atlas, Casa Datahub, 3MS & Pricing project
    et Transversal, leurs membres avec contrat et lieu, et les lieux
-   Paris / Lisbonne / Kuala Lumpur / Tunis avec leurs fériés sur deux ans.
-   Saisissez votre nom : s'il correspond à une personne de l'organisation,
-   elle devient votre compte **administrateur** (login Windows pré-rempli).
-6. Dans **Paramètres**, ajustez si besoin : logins Windows des membres (pour
-   leur connexion automatique), rôles, équipes, lieux supplémentaires
-   (générateurs fournis : France, Portugal, Malaisie, Tunisie, Luxembourg,
-   Québec/Montréal), droits CP/RTT, cibles de jours travaillés.
+   Paris / Lisbonne (**Lisbon**) / Kuala Lumpur / Tunis avec leurs fériés sur
+   deux ans. Saisissez votre nom : s'il correspond à une personne de
+   l'organisation, elle devient votre compte **administrateur** (login
+   Windows pré-rempli).
+6. Dans **Paramètres (Settings)**, ajustez si besoin : logins Windows des
+   membres (pour leur connexion automatique), profils, équipes, lieux
+   supplémentaires (générateurs fournis : France, Portugal, Malaisie,
+   Tunisie, Luxembourg, Québec/Montréal), droits CP/RTT, cibles de jours
+   travaillés, date de fin de contrat.
 
 ## 2. Connexion automatique par login Windows
 
@@ -57,19 +64,31 @@ chaque personne (casse ignorée) et connecte l'utilisateur automatiquement.
 
 ## 3. Fonctionnement au quotidien
 
-Chaque membre peut :
+Chaque membre peut, depuis **Mon espace (My space)** :
 - poser une **demande de congé / RTT / congé sans solde** → « En attente »
-  jusqu'à validation par un administrateur ;
-- déclarer **télétravail, arrêt maladie ou absence imprévue** → enregistrés
-  directement (faits constatés, pas de validation) ;
+  (**Pending**) jusqu'à validation par un administrateur ;
+- déclarer **télétravail, arrêt maladie, absence imprévue ou formation
+  (Training)** → enregistrés directement (faits constatés, pas de
+  validation) ;
 - suivre ses **soldes CP/RTT restants** (internes et externes, chacun avec
-  ses propres défauts), ses demandes et le **calendrier équipe** — regroupé
-  par équipe (avec un bandeau par équipe), filtrable pour n'en afficher
-  qu'une seule — avec la ligne « Disponibles » (capacité par jour).
+  ses propres défauts), ses demandes et le **calendrier équipe (Team
+  calendar)** — avec la ligne « Disponibles » (**Available**, capacité par
+  jour).
 
 Les jours sont décomptés en **jours ouvrés selon le lieu de la personne** :
 un 14 juillet est férié pour Paris mais ouvré pour Kuala Lumpur, et
 inversement pour le Federal Territory Day.
+
+### Regroupement par équipe, avec expand/collapse
+
+Le **calendrier équipe** et **Équipes & soldes (Teams & balances)**
+regroupent les personnes par équipe (bandeau coloré + nom + effectif).
+Chaque bandeau porte un bouton **▼ / ▶** pour réduire (collapse) ou déplier
+(expand) l'équipe correspondante — pratique pour se concentrer sur une
+partie de l'organisation sans changer le filtre. L'état replié/déplié est
+mémorisé pendant la session et partagé entre les deux écrans, mais n'affecte
+jamais les totaux (ligne « Disponibles », soldes) qui restent calculés sur
+tout le monde même équipe repliée.
 
 ### Affichage des personnes : trigramme d'équipe
 
@@ -87,16 +106,17 @@ production), MDP (Master Datahub Pricing), MDA (Master Datahub Atlas), CDH
 ### Profils (cumulables)
 
 Chaque personne peut cumuler plusieurs profils, gérés par les admins dans
-Paramètres → Personnes :
+Paramètres → Personnes (**Settings → People**) :
 
 - **Standard** (implicite, tout le monde) : poser/annuler ses propres
   demandes, voir le calendrier d'équipe ;
-- **Admin** : valider/refuser les demandes (onglet Validation), saisir pour
-  un tiers (le champ « Personne » apparaît directement dans Mon espace,
-  avec un rappel, ainsi que dans Équipes & soldes), gérer personnes/équipes/
-  lieux/fériés (onglets **Équipes & soldes** — lui aussi regroupé par
-  équipe et filtrable — et Paramètres), export CSV ;
-- **Chef de projet** : onglets **Capacity plan** et **Projets**.
+- **Admin** : valider/refuser les demandes (onglet **Approvals**), saisir
+  pour un tiers (le champ « Person » apparaît directement dans My space,
+  avec un rappel, ainsi que dans Teams & balances), gérer personnes/équipes/
+  lieux/fériés (onglets **Teams & balances** — regroupé par équipe,
+  expand/collapse — et **Settings**), export CSV ;
+- **Chef de projet (Project manager)** : onglets **Capacity plan** et
+  **Projects**.
 
 Un chef de projet non admin ne peut pas valider de congés ; un admin non
 chef de projet ne voit pas le capacity plan. Dans l'organisation de base :
@@ -176,9 +196,29 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
 - Ces valeurs par défaut ne s'appliquent qu'à la création d'une personne
   (ou en changeant son contrat tant que les champs CP/RTT/cible sont restés
   à l'un des deux défauts) — modifiables ensuite librement dans Paramètres.
-- La colonne « Projeté » = jours ouvrés de l'année selon le lieu − absences
-  validées ; elle passe en rouge sous la cible. La cible est modifiable par
-  personne.
+- La colonne « Projeté » (**Projected**) = jours ouvrés de l'année selon le
+  lieu − absences validées ; elle passe en rouge sous la cible. La cible est
+  modifiable par personne.
+
+### Date de fin de contrat (End date)
+
+Chaque personne peut recevoir, dans Paramètres → Personnes (**Settings →
+People**, colonne **End date**), une date de fin de contrat/mission —
+la date à laquelle elle quitte l'équipe. À partir de cette date :
+- sa **capacité disponible tombe à zéro** automatiquement (calendrier,
+  capacity plan, projets) — un mois à cheval sur la date de fin est
+  proratisé (jours ouvrés jusqu'à cette date seulement) ;
+- elle reste visible dans les écrans (historique, transparence) mais ses
+  cellules du calendrier au-delà de sa date de fin sont grisées avec la
+  mention « Left the team on JJ/MM/AAAA » ; un sous-libellé « Ends
+  JJ/MM/AAAA » apparaît partout où sa fiche s'affiche.
+- la simulation de congés restants (voir plus bas) s'arrête d'elle-même dès
+  qu'elle n'a plus de capacité ce mois-là — pas de valeur négative
+  artificielle.
+
+Ce champ est indépendant de la case « Actif » : il ne masque pas la
+personne, il fait juste disparaître sa capacité à la date prévue, sans
+attendre que l'admin pense à la désactiver manuellement le jour J.
 
 ### Jours fériés — cas de Kuala Lumpur et Tunis
 
@@ -198,23 +238,28 @@ le lundi de Pâques à la place — ajustez si besoin.
 ## 4. Comment les données sont stockées
 
 ```
-donnees/
+data/
 ├── config.json          ← équipes, lieux, personnes, rôles, fériés
-└── requests/
-    ├── req_xxx.json     ← une demande/absence = un fichier
+├── requests/
+│   ├── req_xxx.json     ← une demande/absence = un fichier
+│   └── ...
+└── projects/
+    ├── proj_xxx.json    ← un projet (cibles, affectations, charges) = un fichier
     └── ...
 ```
 
-Le choix « un fichier par demande » est volontaire : OneDrive synchronise des
-fichiers entiers, donc deux personnes qui saisissent en même temps modifient
-des fichiers **différents** et il n'y a pas d'écrasement mutuel. Seul
-`config.json` est partagé, modifié rarement et uniquement par les admins.
+Le choix « un fichier par demande/projet » est volontaire : OneDrive
+synchronise des fichiers entiers, donc deux personnes qui saisissent en même
+temps modifient des fichiers **différents** et il n'y a pas d'écrasement
+mutuel. Seul `config.json` est partagé, modifié rarement et uniquement par
+les admins.
 
 Les données se rafraîchissent quand la fenêtre reprend le focus ; le bouton
-**⟳ Rafraîchir** force la relecture. Les données créées avec la première
-version (mono-équipe) sont migrées automatiquement.
+**⟳ Refresh** force la relecture. Les données créées avec les versions
+précédentes (mono-équipe, ancien format de projet, etc.) sont migrées
+automatiquement à l'ouverture.
 
-**Sauvegarde** : copiez périodiquement le dossier `donnees/` (OneDrive
+**Sauvegarde** : copiez périodiquement le dossier `data/` (OneDrive
 conserve aussi un historique de versions des fichiers).
 
 ## 5. Limites à connaître (importantes)

@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Capacité Équipe — Congés & Absences</title>
+<title>Team Capacity — Leave &amp; Absences</title>
 <style>
   :root{
     --bg:#f4f6f9; --card:#ffffff; --border:#dfe4ea; --text:#1f2937; --muted:#6b7280;
     --primary:#2563eb; --primary-dark:#1d4ed8; --danger:#dc2626; --ok:#059669;
-    --cp:#2563eb; --rtt:#7c3aed; --tt:#059669; --mal:#d97706; --abs:#dc2626; --ss:#6b7280;
+    --cp:#2563eb; --rtt:#7c3aed; --tt:#059669; --mal:#d97706; --abs:#dc2626; --ss:#6b7280; --trn:#0891b2;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{font-family:"Segoe UI",system-ui,Arial,sans-serif; background:var(--bg); color:var(--text); font-size:14px;}
@@ -65,12 +65,15 @@
   table.cal td.hol{background:#fde68a;}
   table.cal td.absent{color:#fff; font-weight:700;}
   table.cal td.pending-cell{opacity:.55; font-weight:700;}
+  table.cal td.left{background:#f3f4f6; color:#c3c2b7;}
   table.cal tr.caprow td{background:#f3f4f6; font-weight:700;}
   .legend{display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--muted);}
   .legend .sw{display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:4px;}
   .pend-note{color:#b45309; font-size:10px; line-height:1.2; white-space:nowrap;}
   .smooth-note{color:#4a3aa7; font-size:10px; line-height:1.2; white-space:nowrap;}
   tr.teamhead td{background:#eef1f5; font-weight:700; padding:6px 10px; border-top:2px solid var(--border);}
+  .teamtoggle{background:none; border:none; cursor:pointer; font-size:11px; color:var(--muted); padding:0 6px 0 0; vertical-align:middle;}
+  .teamtoggle:hover{color:var(--text);}
   .overlay{position:fixed; inset:0; background:rgba(17,24,39,.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px;}
   .overlay .box{background:#fff; border-radius:10px; padding:28px; max-width:540px; width:100%; max-height:92vh; overflow:auto;}
   .overlay .box h2{margin-bottom:8px; font-size:18px;}
@@ -88,12 +91,12 @@
 <body>
 
 <header>
-  <h1>📅 Capacité Équipe</h1>
+  <h1>📅 Team Capacity</h1>
   <span id="mode-indicator" class="muted"></span>
   <div class="spacer"></div>
   <span class="who" id="who"></span>
-  <button class="btn small secondary" id="btn-refresh" title="Recharger les données depuis le dossier partagé">⟳ Rafraîchir</button>
-  <button class="btn small secondary" id="btn-switch-user">Changer d'utilisateur</button>
+  <button class="btn small secondary" id="btn-refresh" title="Reload data from the shared folder">⟳ Refresh</button>
+  <button class="btn small secondary" id="btn-switch-user">Switch user</button>
 </header>
 
 <nav id="tabs"></nav>
@@ -102,19 +105,19 @@
 <!-- ============ Overlays ============ -->
 <div class="overlay" id="ov-connect">
   <div class="box">
-    <h2>Bienvenue 👋</h2>
-    <p>Cette application gère les congés, télétravail et absences des équipes.
-       Les données sont stockées dans un <b>dossier partagé</b> (par exemple un dossier
-       OneDrive/SharePoint synchronisé sur votre PC). Choisissez ce dossier pour commencer.</p>
+    <h2>Welcome 👋</h2>
+    <p>This application manages the team's leave, remote work, and absences.
+       Data is stored in a <b>shared folder</b> (for example a OneDrive/SharePoint
+       folder synced to your PC). Choose that folder to get started.</p>
     <div id="connect-fs">
-      <button class="btn" id="btn-pick-folder">📂 Choisir le dossier de données</button>
-      <p class="muted" style="margin-top:10px">Astuce : sélectionnez le dossier <code>donnees</code> du OneDrive partagé
-      par votre responsable. Le navigateur vous demandera l'autorisation de lecture/écriture : cliquez sur « Autoriser ».</p>
+      <button class="btn" id="btn-pick-folder">📂 Choose the data folder</button>
+      <p class="muted" style="margin-top:10px">Tip: select the <code>data</code> folder in the OneDrive shared
+      by your manager. The browser will ask for read/write permission: click "Allow".</p>
     </div>
     <div id="connect-unsupported" class="hidden">
-      <div class="notice err">Votre navigateur ne permet pas l'accès aux dossiers locaux
-      (API File System Access absente). Utilisez <b>Microsoft Edge</b> ou <b>Google Chrome</b>.</div>
-      <button class="btn secondary" id="btn-demo">Continuer en mode démo (données locales à ce PC uniquement)</button>
+      <div class="notice err">Your browser doesn't support local folder access
+      (the File System Access API is missing). Use <b>Microsoft Edge</b> or <b>Google Chrome</b>.</div>
+      <button class="btn secondary" id="btn-demo">Continue in demo mode (data stored locally on this PC only)</button>
     </div>
     <div id="connect-error" class="notice err hidden"></div>
   </div>
@@ -122,123 +125,125 @@
 
 <div class="overlay hidden" id="ov-setup">
   <div class="box">
-    <h2>Première utilisation — configuration</h2>
-    <p>Ce dossier ne contient pas encore de données. L'<b>organisation de base</b>
-       (équipes, personnes, lieux Paris / Lisbonne / Kuala Lumpur / Tunis avec leurs
-       fériés) sera créée automatiquement — le tout modifiable ensuite dans Paramètres.
-       Saisissez votre nom : vous serez <b>administrateur</b> (si le nom correspond à
-       une personne de l'organisation, elle est reconnue).</p>
-    <label>Votre nom complet</label>
-    <input id="setup-name" placeholder="ex : Marie Dupont">
-    <label>Votre login Windows (pour la connexion automatique via Lancer.cmd)</label>
-    <input id="setup-login" placeholder="ex : mdupont">
+    <h2>First-time setup</h2>
+    <p>This folder doesn't have any data yet. The <b>default organization</b>
+       (teams, people, locations — Paris / Lisbon / Kuala Lumpur / Tunis — with their
+       public holidays) will be created automatically — all of it editable afterwards in Settings.
+       Enter your name: you'll become an <b>administrator</b> (if the name matches
+       a person in the organization, they'll be recognized).</p>
+    <label>Your full name</label>
+    <input id="setup-name" placeholder="e.g. Mary Smith">
+    <label>Your Windows login (for automatic sign-in via Lancer.cmd)</label>
+    <input id="setup-login" placeholder="e.g. msmith">
     <div class="formgrid">
-      <div><label>Congés payés / an (jours)</label><input id="setup-cp" type="number" value="31" min="0" step="0.5"></div>
-      <div><label>RTT / an (jours)</label><input id="setup-rtt" type="number" value="14" min="0" step="0.5"></div>
+      <div><label>Paid leave / year (days)</label><input id="setup-cp" type="number" value="31" min="0" step="0.5"></div>
+      <div><label>RTT / year (days)</label><input id="setup-rtt" type="number" value="14" min="0" step="0.5"></div>
     </div>
-    <div style="margin-top:16px"><button class="btn" id="btn-setup-ok">Créer et démarrer</button></div>
+    <div style="margin-top:16px"><button class="btn" id="btn-setup-ok">Create and start</button></div>
     <div id="setup-error" class="notice err hidden" style="margin-top:10px"></div>
   </div>
 </div>
 
 <div class="overlay hidden" id="ov-login">
   <div class="box">
-    <h2>Qui êtes-vous ?</h2>
+    <h2>Who are you?</h2>
     <div id="login-hint"></div>
-    <p>Sélectionnez votre nom. <span class="muted">Pour une connexion automatique, lancez
-       l'application via <b>Lancer.cmd</b> et demandez à un administrateur d'associer
-       votre login Windows dans Paramètres.</span></p>
+    <p>Select your name. <span class="muted">For automatic sign-in, launch
+       the app via <b>Lancer.cmd</b> and ask an administrator to link
+       your Windows login in Settings.</span></p>
     <select id="login-select"></select>
-    <div style="margin-top:16px"><button class="btn" id="btn-login">Entrer</button></div>
+    <div style="margin-top:16px"><button class="btn" id="btn-login">Enter</button></div>
   </div>
 </div>
 
 <script>
 "use strict";
 /* =====================================================================
-   Capacité Équipe — application monofichier, sans serveur.
-   Données (dossier partagé OneDrive synchronisé) :
-     config.json            -> équipes, lieux, personnes, rôles, fériés
-     requests/req_*.json    -> une demande/absence par fichier (limite les
-                               conflits de synchronisation OneDrive)
-   Connexion automatique : Lancer.cmd ouvre index.html?login=%USERNAME%
-   et le login est rapproché du champ « Login Windows » de chaque personne.
+   Team Capacity — single-file application, no server required.
+   Data (synced OneDrive shared folder):
+     config.json            -> teams, locations, people, roles, holidays
+     requests/req_*.json    -> one leave/absence request per file (limits
+                               OneDrive sync conflicts)
+     projects/proj_*.json   -> one project per file
+   Automatic sign-in: Lancer.cmd opens index.html?login=%USERNAME%
+   and the login is matched against each person's "Windows login" field.
    ===================================================================== */
 
-/* ---------- Types d'absence ---------- */
+/* ---------- Absence types ---------- */
 const TYPES = {
-  CP:  {label:"Congé payé",       hex:"#2563eb", needsApproval:true,  deducts:"cp",  absent:true},
-  RTT: {label:"RTT",              hex:"#7c3aed", needsApproval:true,  deducts:"rtt", absent:true},
-  TT:  {label:"Télétravail",      hex:"#059669", needsApproval:false, deducts:null,  absent:false},
-  MAL: {label:"Arrêt maladie",    hex:"#d97706", needsApproval:false, deducts:null,  absent:true},
-  ABS: {label:"Absence imprévue", hex:"#dc2626", needsApproval:false, deducts:null,  absent:true},
-  SS:  {label:"Congé sans solde", hex:"#6b7280", needsApproval:true,  deducts:null,  absent:true},
+  CP:  {label:"Paid leave",        hex:"#2563eb", needsApproval:true,  deducts:"cp",  absent:true,  letter:"C"},
+  RTT: {label:"RTT",                hex:"#7c3aed", needsApproval:true,  deducts:"rtt", absent:true,  letter:"R"},
+  TT:  {label:"Remote work",       hex:"#059669", needsApproval:false, deducts:null,  absent:false, letter:"T"},
+  MAL: {label:"Sick leave",        hex:"#d97706", needsApproval:false, deducts:null,  absent:true,  letter:"M"},
+  ABS: {label:"Unplanned absence", hex:"#dc2626", needsApproval:false, deducts:null,  absent:true,  letter:"A"},
+  SS:  {label:"Unpaid leave",      hex:"#6b7280", needsApproval:true,  deducts:null,  absent:true,  letter:"S"},
+  TRN: {label:"Training",          hex:"#0891b2", needsApproval:false, deducts:null,  absent:true,  letter:"L"},
 };
-const STATUS = {pending:"En attente", approved:"Validé", rejected:"Refusé"};
+const STATUS = {pending:"Pending", approved:"Approved", rejected:"Rejected"};
 const CONTRACTS = {
-  interne:{label:"Interne", target:206, cp:31, rtt:14},
-  externe:{label:"Externe", target:210, cp:28, rtt:10},
+  interne:{label:"Internal", target:206, cp:31, rtt:14},
+  externe:{label:"External", target:210, cp:28, rtt:10},
 };
-/* Profils cumulables. Tout le monde a le profil « standard » implicite
-   (poser/annuler ses congés, voir le planning d'équipe). */
-const PROFILES = {admin:"Administrateur", cdp:"Chef de projet"};
+/* Cumulative profiles. Everyone has the implicit "standard" profile
+   (submit/cancel their own leave, view the team schedule). */
+const PROFILES = {admin:"Administrator", cdp:"Project manager"};
 
-/* ---------- Utilitaires dates ---------- */
+/* ---------- Date helpers ---------- */
 const pad = n => String(n).padStart(2,"0");
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const fromIso = s => { const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); };
-const fmtFr = s => { const d=fromIso(s); return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}); };
+const fmtDate = s => { const d=fromIso(s); return d.toLocaleDateString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric"}); };
 const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
 const isWeekend = d => d.getDay()===0 || d.getDay()===6;
 const todayIso = () => iso(new Date());
 
-function easterSunday(y){ // algorithme de Butcher
+function easterSunday(y){ // Butcher's algorithm
   const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),
         g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,
         l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
         mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
   return new Date(y,mo-1,da);
 }
-function nthWeekday(y,m,dow,n){ // n-ième <dow> (0=dim) du mois m (0-11)
+function nthWeekday(y,m,dow,n){ // n-th <dow> (0=Sun) of month m (0-11)
   const d=new Date(y,m,1); let c=0;
   for(;;){ if(d.getDay()===dow){ c++; if(c===n) return new Date(d); } d.setDate(d.getDate()+1); }
 }
-function mondayBefore(y,m,day){ // lundi strictement avant le <day> du mois
+function mondayBefore(y,m,day){ // Monday strictly before the <day> of the month
   const d=new Date(y,m,day);
   do{ d.setDate(d.getDate()-1); }while(d.getDay()!==1);
   return d;
 }
 
-/* ---------- Générateurs de jours fériés par pays/lieu ---------- */
+/* ---------- Public holiday generators per country/location ---------- */
 function holFR(y){ const e=easterSunday(y); return [
-  {date:`${y}-01-01`,label:"Jour de l'an"},
-  {date:iso(addDays(e,1)),label:"Lundi de Pâques"},
-  {date:`${y}-05-01`,label:"Fête du Travail"},
-  {date:`${y}-05-08`,label:"Victoire 1945"},
-  {date:iso(addDays(e,39)),label:"Ascension"},
-  {date:iso(addDays(e,50)),label:"Lundi de Pentecôte"},
-  {date:`${y}-07-14`,label:"Fête nationale"},
-  {date:`${y}-08-15`,label:"Assomption"},
-  {date:`${y}-11-01`,label:"Toussaint"},
-  {date:`${y}-11-11`,label:"Armistice 1918"},
-  {date:`${y}-12-25`,label:"Noël"},
+  {date:`${y}-01-01`,label:"New Year's Day"},
+  {date:iso(addDays(e,1)),label:"Easter Monday"},
+  {date:`${y}-05-01`,label:"Labour Day"},
+  {date:`${y}-05-08`,label:"Victory in Europe Day"},
+  {date:iso(addDays(e,39)),label:"Ascension Day"},
+  {date:iso(addDays(e,50)),label:"Whit Monday"},
+  {date:`${y}-07-14`,label:"Bastille Day"},
+  {date:`${y}-08-15`,label:"Assumption Day"},
+  {date:`${y}-11-01`,label:"All Saints' Day"},
+  {date:`${y}-11-11`,label:"Armistice Day"},
+  {date:`${y}-12-25`,label:"Christmas Day"},
 ];}
 function holPT(y){ const e=easterSunday(y); return [
-  {date:`${y}-01-01`,label:"Ano Novo"},
-  {date:iso(addDays(e,-2)),label:"Sexta-feira Santa"},
-  {date:`${y}-04-25`,label:"Dia da Liberdade"},
-  {date:`${y}-05-01`,label:"Dia do Trabalhador"},
-  {date:iso(addDays(e,60)),label:"Corpo de Deus"},
-  {date:`${y}-06-10`,label:"Dia de Portugal"},
-  {date:`${y}-06-13`,label:"Santo António (Lisbonne)"},
-  {date:`${y}-08-15`,label:"Assunção"},
-  {date:`${y}-10-05`,label:"Implantação da República"},
-  {date:`${y}-11-01`,label:"Todos os Santos"},
-  {date:`${y}-12-01`,label:"Restauração da Independência"},
-  {date:`${y}-12-08`,label:"Imaculada Conceição"},
-  {date:`${y}-12-25`,label:"Natal"},
+  {date:`${y}-01-01`,label:"New Year's Day"},
+  {date:iso(addDays(e,-2)),label:"Good Friday"},
+  {date:`${y}-04-25`,label:"Freedom Day"},
+  {date:`${y}-05-01`,label:"Labour Day"},
+  {date:iso(addDays(e,60)),label:"Corpus Christi"},
+  {date:`${y}-06-10`,label:"Portugal Day"},
+  {date:`${y}-06-13`,label:"St. Anthony's Day (Lisbon)"},
+  {date:`${y}-08-15`,label:"Assumption Day"},
+  {date:`${y}-10-05`,label:"Republic Day"},
+  {date:`${y}-11-01`,label:"All Saints' Day"},
+  {date:`${y}-12-01`,label:"Restoration of Independence Day"},
+  {date:`${y}-12-08`,label:"Immaculate Conception"},
+  {date:`${y}-12-25`,label:"Christmas Day"},
 ];}
-function holMY(y){ return [ // fériés à date fixe de Kuala Lumpur (territoire fédéral)
+function holMY(y){ return [ // fixed-date public holidays for Kuala Lumpur (federal territory)
   {date:`${y}-01-01`,label:"New Year's Day"},
   {date:`${y}-02-01`,label:"Federal Territory Day"},
   {date:`${y}-05-01`,label:"Labour Day"},
@@ -248,70 +253,70 @@ function holMY(y){ return [ // fériés à date fixe de Kuala Lumpur (territoire
   {date:`${y}-12-25`,label:"Christmas Day"},
 ];}
 function holLU(y){ const e=easterSunday(y); return [
-  {date:`${y}-01-01`,label:"Jour de l'an"},
-  {date:iso(addDays(e,1)),label:"Lundi de Pâques"},
-  {date:`${y}-05-01`,label:"Fête du Travail"},
-  {date:`${y}-05-09`,label:"Journée de l'Europe"},
-  {date:iso(addDays(e,39)),label:"Ascension"},
-  {date:iso(addDays(e,50)),label:"Lundi de Pentecôte"},
-  {date:`${y}-06-23`,label:"Fête nationale"},
-  {date:`${y}-08-15`,label:"Assomption"},
-  {date:`${y}-11-01`,label:"Toussaint"},
-  {date:`${y}-12-25`,label:"Noël"},
-  {date:`${y}-12-26`,label:"Saint-Étienne"},
+  {date:`${y}-01-01`,label:"New Year's Day"},
+  {date:iso(addDays(e,1)),label:"Easter Monday"},
+  {date:`${y}-05-01`,label:"Labour Day"},
+  {date:`${y}-05-09`,label:"Europe Day"},
+  {date:iso(addDays(e,39)),label:"Ascension Day"},
+  {date:iso(addDays(e,50)),label:"Whit Monday"},
+  {date:`${y}-06-23`,label:"National Day"},
+  {date:`${y}-08-15`,label:"Assumption Day"},
+  {date:`${y}-11-01`,label:"All Saints' Day"},
+  {date:`${y}-12-25`,label:"Christmas Day"},
+  {date:`${y}-12-26`,label:"St. Stephen's Day"},
 ];}
-function holTN(y){ return [ // fêtes civiles fixes de Tunisie
-  {date:`${y}-01-01`,label:"Jour de l'an"},
-  {date:`${y}-03-20`,label:"Fête de l'Indépendance"},
-  {date:`${y}-04-09`,label:"Journée des Martyrs"},
-  {date:`${y}-05-01`,label:"Fête du Travail"},
-  {date:`${y}-07-25`,label:"Fête de la République"},
-  {date:`${y}-08-13`,label:"Fête de la Femme"},
-  {date:`${y}-10-15`,label:"Fête de l'Évacuation"},
-  {date:`${y}-12-17`,label:"Fête de la Révolution"},
+function holTN(y){ return [ // fixed-date civil holidays of Tunisia
+  {date:`${y}-01-01`,label:"New Year's Day"},
+  {date:`${y}-03-20`,label:"Independence Day"},
+  {date:`${y}-04-09`,label:"Martyrs' Day"},
+  {date:`${y}-05-01`,label:"Labour Day"},
+  {date:`${y}-07-25`,label:"Republic Day"},
+  {date:`${y}-08-13`,label:"Women's Day"},
+  {date:`${y}-10-15`,label:"Evacuation Day"},
+  {date:`${y}-12-17`,label:"Revolution Day"},
 ];}
 function holQC(y){ const e=easterSunday(y); return [
-  {date:`${y}-01-01`,label:"Jour de l'an"},
-  {date:iso(addDays(e,-2)),label:"Vendredi saint"},
-  {date:iso(mondayBefore(y,4,25)),label:"Journée nationale des patriotes"},
-  {date:`${y}-06-24`,label:"Fête nationale du Québec"},
-  {date:`${y}-07-01`,label:"Fête du Canada"},
-  {date:iso(nthWeekday(y,8,1,1)),label:"Fête du travail"},
-  {date:iso(nthWeekday(y,9,1,2)),label:"Action de grâce"},
-  {date:`${y}-12-25`,label:"Noël"},
+  {date:`${y}-01-01`,label:"New Year's Day"},
+  {date:iso(addDays(e,-2)),label:"Good Friday"},
+  {date:iso(mondayBefore(y,4,25)),label:"National Patriots' Day"},
+  {date:`${y}-06-24`,label:"Fête Nationale du Québec"},
+  {date:`${y}-07-01`,label:"Canada Day"},
+  {date:iso(nthWeekday(y,8,1,1)),label:"Labour Day"},
+  {date:iso(nthWeekday(y,9,1,2)),label:"Thanksgiving"},
+  {date:`${y}-12-25`,label:"Christmas Day"},
 ];}
 const HOLGENS = {
   FR:{label:"France (Paris)", gen:holFR},
-  PT:{label:"Portugal (Lisbonne)", gen:holPT},
-  MY:{label:"Malaisie (Kuala Lumpur)", gen:holMY,
-      note:"⚠ Seuls les fériés à date fixe sont générés. Ajoutez chaque année manuellement : Nouvel An chinois (2 j), Thaipusam, Hari Raya Aidilfitri (2 j), Wesak, Hari Raya Haji, Awal Muharram, Maulidur Rasul, Deepavali."},
-  TN:{label:"Tunisie (Tunis)", gen:holTN,
-      note:"⚠ Seules les fêtes civiles à date fixe sont générées. Ajoutez chaque année manuellement les fêtes religieuses : Aïd el-Fitr (2 j), Aïd el-Idha (2 j), Ras el Am hégirien, Mouled."},
+  PT:{label:"Portugal (Lisbon)", gen:holPT},
+  MY:{label:"Malaysia (Kuala Lumpur)", gen:holMY,
+      note:"⚠ Only fixed-date holidays are generated. Add these manually each year: Chinese New Year (2 days), Thaipusam, Hari Raya Aidilfitri (2 days), Wesak, Hari Raya Haji, Awal Muharram, Maulidur Rasul, Deepavali."},
+  TN:{label:"Tunisia (Tunis)", gen:holTN,
+      note:"⚠ Only fixed-date civil holidays are generated. Add these manually each year: Eid al-Fitr (2 days), Eid al-Adha (2 days), Islamic New Year, Mouled."},
   LU:{label:"Luxembourg", gen:holLU},
-  CA_QC:{label:"Canada — Québec (Montréal)", gen:holQC,
-      note:"Le Vendredi saint est généré ; certains employeurs chôment le lundi de Pâques à la place — ajustez si besoin."},
-  NONE:{label:"Autre (saisie manuelle)", gen:()=>[]},
+  CA_QC:{label:"Canada — Québec (Montreal)", gen:holQC,
+      note:"Good Friday is generated; some employers observe Easter Monday instead — adjust if needed."},
+  NONE:{label:"Other (manual entry)", gen:()=>[]},
 };
 
-/* ---------- Organisation de base (créée au premier lancement, modifiable ensuite) ----------
-   Format membre : [nom, contrat, lieu, rôle facultatif] */
-const DEFAULT_LOCS = [["Paris","FR"],["Lisbonne","PT"],["Kuala Lumpur","MY"],["Tunis","TN"]];
-/* Trigramme affiché devant le prénom de chaque personne (listes, plannings).
-   Éditable ensuite dans Paramètres → Équipes. */
+/* ---------- Default organization (created on first launch, editable afterwards) ----------
+   Member format: [name, contract, location, optional roles] */
+const DEFAULT_LOCS = [["Paris","FR"],["Lisbon","PT"],["Kuala Lumpur","MY"],["Tunis","TN"]];
+/* Trigram shown before each person's first name (lists, schedules).
+   Editable afterwards in Settings → Teams. */
 const DEFAULT_TRIGRAMS = {
   "Stability of production":"SOP", "Master Datahub Pricing":"MDP", "Master Datahub Atlas":"MDA",
   "Casa Datahub":"CDH", "3MS & Pricing project":"3MS", "Transversal":"TRV",
 };
-/* Suggestion automatique de trigramme pour une équipe créée ensuite dans
-   Paramètres (reste éditable) : initiales des mots significatifs, ou les
-   3 premières lettres si un seul mot. */
+/* Automatic trigram suggestion for a team created afterwards in Settings
+   (stays editable) : initials of the significant words, or the first
+   3 letters if there's a single word. */
 function autoTrigram(name){
   const STOP = new Set(["de","du","des","la","le","les","et","of","the","and","à","a"]);
   const words = (name||"").trim().split(/\s+/).map(w=>w.replace(/[^a-zA-Z0-9]/g,"")).filter(Boolean);
   const sig = words.filter(w=>!STOP.has(w.toLowerCase()));
   const use = sig.length ? sig : words;
   if(use.length<=1){
-    const base=(use[0]||"EQU").toUpperCase();
+    const base=(use[0]||"TEA").toUpperCase();
     return (base+"XXX").slice(0,3);
   }
   let letters = use.map(w=>w[0]).join("").toUpperCase();
@@ -334,14 +339,14 @@ const DEFAULT_ORG = [
     ["Saloua","externe","Paris"], ["Souha","externe","Paris"], ["Mustapha","externe","Paris"],
     ["Abibatou","externe","Paris"], ["Nabila","externe","Paris"],
     ["Marcin","interne","Kuala Lumpur"], ["Radha","externe","Kuala Lumpur"],
-    ["Ghaith","externe","Lisbonne"]]},
+    ["Ghaith","externe","Lisbon"]]},
   {team:"Transversal", members:[
     ["Jerome","interne","Paris",["admin","cdp"]], ["Walid","interne","Paris"],
     ["Youssef","interne","Paris",["admin"]], ["Firas","interne","Paris",["cdp"]],
     ["Gwendoline","interne","Paris",["cdp"]], ["Jeremy","interne","Paris",["admin","cdp"]]]},
 ];
-/* Compétence de chaque personne (texte libre, mais pré-remplie ici pour
-   l'organisation de base — modifiable ensuite dans Paramètres). */
+/* Skill of each person (free text, pre-filled here for the default
+   organization — editable afterwards in Settings). */
 const DEFAULT_SKILLS = {
   "Business Analyst": ["Saloua","Nabila","Abibatou","Mustapha"],
   "Developer": ["Souha","Landry","Ali","Saleh","Marcin","Ghaith","Radha","Farid","Soumaya","Chaima","Sarra","Olivier","Laurent","Béraud"],
@@ -368,13 +373,13 @@ function buildDefaultConfig(){
       people.push({id:uid()+Math.random().toString(36).slice(2,5), name, winLogin:"",
         roles:roles||[], skill:SKILL_BY_NAME[name]||"", teamId:t.id, locationId:locByName[locName], contract,
         target:CONTRACTS[contract].target,
-        cp:CONTRACTS[contract].cp, rtt:CONTRACTS[contract].rtt, active:true});
+        cp:CONTRACTS[contract].cp, rtt:CONTRACTS[contract].rtt, endDate:"", active:true});
     }
   });
-  return {version:5, teams, locations, people, holidays};
+  return {version:6, teams, locations, people, holidays};
 }
 
-/* ---------- État global ---------- */
+/* ---------- Global state ---------- */
 let config = null;
 let requests = [];
 let projects = [];
@@ -383,6 +388,7 @@ let currentTab = "me";
 let calYear, calMonth, calTeam = "all", teamViewFilter = "all", settingsLoc = null;
 let capYear, capTeam = "all", capSkill = "all", capSmooth = true;
 let projSel = null, projYear;
+let collapsedTeams = new Set();
 const now = new Date();
 calYear = now.getFullYear(); calMonth = now.getMonth();
 capYear = now.getFullYear(); projYear = now.getFullYear();
@@ -397,12 +403,12 @@ const isCdp = () => hasProfile(currentUser, "cdp");
 const uid = () => Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
 const activePeople = () => config.people.filter(p=>p.active!==false);
 const contractTarget = p => p.target ?? CONTRACTS[p.contract||"interne"].target;
-/* Convention d'affichage partout où une liste de personnes apparaît
-   (listes déroulantes, planning, capacity plan) : "TRI-Prénom", trié
-   alphabétiquement sur cette chaîne (donc groupé par équipe). */
+/* Display convention wherever a list of people appears (dropdowns,
+   schedule, capacity plan): "TRI-FirstName", sorted alphabetically on
+   that string (so grouped by team). */
 const teamTrigram = teamId => (teamById(teamId)?.trigram) || "???";
 const personLabel = p => `${teamTrigram(p.teamId)}-${p.name}`;
-const sortPeople = list => [...list].sort((a,b)=>personLabel(a).localeCompare(personLabel(b),"fr"));
+const sortPeople = list => [...list].sort((a,b)=>personLabel(a).localeCompare(personLabel(b),"en"));
 
 function locHolidaySet(locId){
   return new Set(config.holidays.filter(h=>h.locationId===locId).map(h=>h.date));
@@ -411,7 +417,7 @@ function locHolidayLabel(locId, dIso){
   return config.holidays.find(h=>h.locationId===locId && h.date===dIso)?.label;
 }
 
-/* ---------- Décompte de jours ouvrés (selon le lieu de la personne) ---------- */
+/* ---------- Business day counting (per person's location) ---------- */
 function openDaysSet(startIso, endIso, half, hs){
   let n=0;
   for(let d=fromIso(startIso); iso(d)<=endIso; d=addDays(d,1)){
@@ -439,7 +445,7 @@ function businessDaysYear(locId, y){
 }
 
 /* =====================================================================
-   Couche de stockage : dossier partagé (File System Access) ou démo
+   Storage layer: shared folder (File System Access) or demo mode
    ===================================================================== */
 const store = {
   mode: null, dir: null,
@@ -495,7 +501,7 @@ const store = {
     const rd = await this.requestsDir(true);
     try{ await rd.removeEntry(`req_${id}.json`); }catch(e){}
   },
-  /* projets : un fichier par projet (allocations incluses) */
+  /* projects: one file per project (allocations included) */
   async projectsDir(create){ return await this.dir.getDirectoryHandle("projects",{create:!!create}); },
   async loadProjects(){
     if(this.mode==="demo") return JSON.parse(localStorage.getItem("tc_projects")||"[]").map(migrateProject);
@@ -527,12 +533,12 @@ const store = {
   },
 };
 
-/* Migrations : v1 (mono-équipe) -> v2 (équipes/lieux) -> v3 (profils cumulables)
-   -> v4 (compétence) -> v5 (trigramme d'équipe) */
+/* Migrations: v1 (single team) -> v2 (teams/locations) -> v3 (cumulative profiles)
+   -> v4 (skill) -> v5 (team trigram) -> v6 (contract end date) */
 function migrate(cfg){
   if(!cfg) return cfg;
   if(cfg.version===undefined || cfg.version<2){
-    cfg.teams = cfg.teams || [{id:"t-"+uid(), name:"Équipe 1"}];
+    cfg.teams = cfg.teams || [{id:"t-"+uid(), name:"Team 1"}];
     cfg.locations = cfg.locations || [{id:"l-"+uid(), name:"Paris", gen:"FR"}];
     const defLoc = cfg.locations[0].id, defTeam = cfg.teams[0].id;
     cfg.holidays = (cfg.holidays||[]).map(h=>h.locationId?h:{...h, locationId:defLoc});
@@ -560,9 +566,13 @@ function migrate(cfg){
     for(const t of cfg.teams||[]) if(!t.trigram) t.trigram = DEFAULT_TRIGRAMS[t.name] || autoTrigram(t.name);
     cfg.version = 5;
   }
+  if(cfg.version<6){
+    for(const p of cfg.people||[]) if(p.endDate===undefined) p.endDate = "";
+    cfg.version = 6;
+  }
   return cfg;
 }
-/* Migration des projets : ancien teamId/skill unique -> targets[] multiples */
+/* Project migration: old single teamId/skill -> targets[] array */
 function migrateProject(p){
   if(!Array.isArray(p.targets)){
     p.targets = p.teamId ? [{teamId:p.teamId, skill:p.skill||""}] : [];
@@ -572,7 +582,7 @@ function migrateProject(p){
   return p;
 }
 
-/* IndexedDB minimal pour mémoriser le dossier choisi entre deux lancements */
+/* Minimal IndexedDB wrapper to remember the chosen folder between launches */
 function idbOpen(){ return new Promise((res,rej)=>{
   const rq = indexedDB.open("capacite-equipe",1);
   rq.onupgradeneeded = ()=>rq.result.createObjectStore("kv");
@@ -588,7 +598,7 @@ async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)
 });}
 
 /* =====================================================================
-   Démarrage & identification
+   Startup & sign-in
    ===================================================================== */
 async function boot(){
   document.getElementById("btn-refresh").onclick = ()=>reloadData(true);
@@ -607,7 +617,7 @@ async function boot(){
         const p = await h.queryPermission({mode:"readwrite"});
         if(p==="granted"){ store.dir=h; store.mode="fs"; await afterConnect(); return; }
         const btn = document.getElementById("btn-pick-folder");
-        btn.textContent = "📂 Reconnecter le dossier « "+h.name+" »";
+        btn.textContent = "📂 Reconnect to folder “"+h.name+"”";
         btn.onclick = async ()=>{
           try{
             const p2 = await h.requestPermission({mode:"readwrite"});
@@ -627,7 +637,7 @@ async function pickFolder(){
   }catch(e){
     if(e && e.name!=="AbortError"){
       const el=document.getElementById("connect-error");
-      el.textContent = "Erreur d'accès au dossier : "+e.message;
+      el.textContent = "Couldn't access the folder: "+e.message;
       el.classList.remove("hidden");
     }
   }
@@ -645,12 +655,12 @@ function showSetup(){
   if(DETECTED_LOGIN) document.getElementById("setup-login").value = DETECTED_LOGIN;
   document.getElementById("btn-setup-ok").onclick = async ()=>{
     const name = document.getElementById("setup-name").value.trim();
-    if(!name){ return setupErr("Veuillez saisir votre nom."); }
+    if(!name){ return setupErr("Please enter your name."); }
     const winLogin = document.getElementById("setup-login").value.trim();
     const cp  = parseFloat(document.getElementById("setup-cp").value)||0;
     const rtt = parseFloat(document.getElementById("setup-rtt").value)||0;
     config = buildDefaultConfig();
-    // rattacher l'admin à la personne correspondante de l'organisation de base
+    // link the admin to the matching person in the default organization
     const norm = s=>s.trim().toLowerCase();
     let me = config.people.find(p=>norm(p.name)===norm(name))
           || config.people.find(p=>norm(p.name).startsWith(norm(name)) || norm(name).startsWith(norm(p.name)));
@@ -661,12 +671,12 @@ function showSetup(){
     }else{
       me = {id:uid(), name, winLogin, roles:["admin"],
         teamId:config.teams[config.teams.length-1].id, locationId:config.locations[0].id,
-        contract:"interne", target:CONTRACTS.interne.target, cp, rtt, active:true};
+        contract:"interne", target:CONTRACTS.interne.target, cp, rtt, endDate:"", active:true};
       config.people.push(me);
     }
     localStorage.setItem("tc_user", me.id);
     try{ await store.saveConfig(config); }
-    catch(e){ return setupErr("Impossible d'écrire dans le dossier : "+e.message); }
+    catch(e){ return setupErr("Couldn't write to the folder: "+e.message); }
     requests = [];
     document.getElementById("ov-setup").classList.add("hidden");
     showLogin(false);
@@ -675,7 +685,7 @@ function showSetup(){
 }
 function showLogin(forceManual){
   const people = activePeople();
-  // 1. connexion automatique par login Windows (?login= fourni par Lancer.cmd)
+  // 1. automatic sign-in via Windows login (?login= supplied by Lancer.cmd)
   if(!forceManual && DETECTED_LOGIN){
     const match = people.find(p=>(p.winLogin||"").toLowerCase()===DETECTED_LOGIN.toLowerCase());
     if(match){
@@ -684,16 +694,16 @@ function showLogin(forceManual){
       startApp(); return;
     }
   }
-  // 2. dernier utilisateur mémorisé sur ce PC
+  // 2. last user remembered on this PC
   const saved = localStorage.getItem("tc_user");
   if(!forceManual && saved && people.some(p=>p.id===saved)){
     currentUser = personById(saved); startApp(); return;
   }
-  // 3. choix manuel
+  // 3. manual selection
   const hint = document.getElementById("login-hint");
   hint.innerHTML = DETECTED_LOGIN
-    ? `<div class="notice info">Login Windows détecté : <b>${esc(DETECTED_LOGIN)}</b> — non associé à une personne.
-       Un administrateur peut l'associer dans Paramètres → Personnes → colonne « Login Windows ».</div>` : "";
+    ? `<div class="notice info">Windows login detected: <b>${esc(DETECTED_LOGIN)}</b> — not linked to anyone yet.
+       An administrator can link it in Settings → People → "Windows login" column.</div>` : "";
   const sel = document.getElementById("login-select");
   sel.innerHTML = sortPeople(people).map(p=>`<option value="${p.id}">${esc(personLabel(p))}</option>`).join("");
   document.getElementById("ov-login").classList.remove("hidden");
@@ -709,11 +719,11 @@ function startApp(){
   const team = teamById(currentUser.teamId), loc = locById(currentUser.locationId);
   const badges = (currentUser.roles||[]).map(r=>
     `<span class="badge ${r==="admin"?"admin":"cdp"}">${PROFILES[r]||r}</span>`).join(" ")
-    || '<span class="badge user">Membre</span>';
+    || '<span class="badge user">Member</span>';
   document.getElementById("who").innerHTML =
-    `Connecté : <b>${esc(currentUser.name)}</b> <span class="muted">(${esc(team?.name||"—")} · ${esc(loc?.name||"—")})</span> ${badges}`;
+    `Signed in: <b>${esc(currentUser.name)}</b> <span class="muted">(${esc(team?.name||"—")} · ${esc(loc?.name||"—")})</span> ${badges}`;
   document.getElementById("mode-indicator").textContent =
-    store.mode==="fs" ? `Dossier : ${store.dir.name}` : "⚠ MODE DÉMO — données locales à ce PC";
+    store.mode==="fs" ? `Folder: ${store.dir.name}` : "⚠ DEMO MODE — data stored locally on this PC";
   renderTabs(); render();
 }
 async function reloadData(showToast){
@@ -725,23 +735,23 @@ async function reloadData(showToast){
     projects = await store.loadProjects();
     if(currentUser) currentUser = personById(currentUser.id) || currentUser;
     render();
-    if(showToast) toast("Données rechargées ✓");
-  }catch(e){ if(showToast) toast("Erreur de rechargement : "+e.message); }
+    if(showToast) toast("Data reloaded ✓");
+  }catch(e){ if(showToast) toast("Reload failed: "+e.message); }
 }
 
 /* =====================================================================
-   Actions métier (les règles de rôle sont appliquées ici ET dans l'UI)
+   Business actions (role rules are applied here AND in the UI)
    ===================================================================== */
 async function createRequest({personId,type,start,end,half,comment}){
-  if(personId!==currentUser.id && !isAdmin()) return alert("Seul un administrateur peut saisir pour quelqu'un d'autre.");
-  if(!TYPES[type]) return alert("Type inconnu.");
-  if(!start || !end || end<start) return alert("Dates invalides.");
+  if(personId!==currentUser.id && !isAdmin()) return alert("Only an administrator can submit a request for someone else.");
+  if(!TYPES[type]) return alert("Unknown type.");
+  if(!start || !end || end<start) return alert("Invalid dates.");
   const person = personById(personId);
   const days = openDaysP(start,end,half,person);
-  if(days===0) return alert("La période ne contient aucun jour ouvré (week-end / férié du lieu de la personne).");
+  if(days===0) return alert("The period doesn't contain any business day (weekend / public holiday for that person's location).");
   const clash = requests.find(r=>r.personId===personId && r.status!=="rejected" &&
       r.start<=end && r.end>=start && (TYPES[r.type].absent===TYPES[type].absent));
-  if(clash && !confirm(`Attention : chevauchement avec « ${TYPES[clash.type].label} du ${fmtFr(clash.start)} au ${fmtFr(clash.end)} » (${STATUS[clash.status]}). Continuer ?`)) return;
+  if(clash && !confirm(`Warning: overlaps with "${TYPES[clash.type].label} from ${fmtDate(clash.start)} to ${fmtDate(clash.end)}" (${STATUS[clash.status]}). Continue anyway?`)) return;
 
   const auto = !TYPES[type].needsApproval || isAdmin();
   const r = {
@@ -752,77 +762,88 @@ async function createRequest({personId,type,start,end,half,comment}){
   };
   await store.saveRequest(r);
   requests = requests.filter(x=>x.id!==r.id).concat(r);
-  toast(auto? "Enregistré et validé ✓" : "Demande envoyée — en attente de validation");
+  toast(auto? "Saved and approved ✓" : "Request submitted — awaiting approval");
   render();
 }
 async function decide(id, status, comment){
-  if(!isAdmin()) return alert("Seul un administrateur peut valider ou refuser.");
+  if(!isAdmin()) return alert("Only an administrator can approve or reject requests.");
   const r = requests.find(x=>x.id===id); if(!r) return;
   r.status = status; r.decidedBy = currentUser.id; r.decidedAt = new Date().toISOString();
   r.decisionComment = comment||"";
   await store.saveRequest(r);
-  toast(status==="approved"?"Demande validée ✓":"Demande refusée");
+  toast(status==="approved"?"Request approved ✓":"Request rejected");
   render();
 }
 async function removeRequest(id){
   const r = requests.find(x=>x.id===id); if(!r) return;
   const own = r.personId===currentUser.id;
   if(!isAdmin() && !(own && r.status==="pending"))
-    return alert("Vous ne pouvez annuler que vos demandes encore en attente.");
-  if(!confirm("Supprimer / annuler cette demande ?")) return;
+    return alert("You can only cancel your own requests while they're still pending.");
+  if(!confirm("Delete / cancel this request?")) return;
   await store.deleteRequest(id);
   requests = requests.filter(x=>x.id!==id);
-  toast("Demande supprimée");
+  toast("Request deleted");
   render();
 }
 
-/* ---------- Soldes & capacité ---------- */
+/* ---------- Balances & capacity ---------- */
 function balances(person, year){
   const rs = requests.filter(r=>r.personId===person.id);
   const sum = (types,status)=> rs.filter(r=>types.includes(r.type) && r.status===status)
                                  .reduce((s,r)=>s+openDaysInYear(r,year,person),0);
   const absentTypes = Object.keys(TYPES).filter(k=>TYPES[k].absent);
   const absApproved = sum(absentTypes,"approved");
-  const open = businessDaysYear(person.locationId, year);
+  const open = [...Array(12)].reduce((s,_,m)=>s+personMonthOpen(person,year,m),0);
   return {
     cpTaken: sum(["CP"],"approved"),  cpPending: sum(["CP"],"pending"),
     rttTaken: sum(["RTT"],"approved"),rttPending: sum(["RTT"],"pending"),
     cpLeft: (person.cp||0) - sum(["CP"],"approved"),
     rttLeft: (person.rtt||0) - sum(["RTT"],"approved"),
     sick: sum(["MAL"],"approved"), abs: sum(["ABS"],"approved"), tt: sum(["TT"],"approved"),
+    training: sum(["TRN"],"approved"),
     pendingAll: sum(absentTypes,"pending"),
     absentAll: absApproved,
     openYear: open,
-    projWorked: open - absApproved,   // jours travaillés projetés (ouvrés − absences validées)
+    projWorked: open - absApproved,   // projected worked days (business days − approved absences)
   };
 }
 
 /* =====================================================================
-   Rendu
+   Rendering
    ===================================================================== */
 function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function teamOptions(sel, withAll){
   const opts = config.teams.map(t=>`<option value="${t.id}" ${sel===t.id?"selected":""}>${esc(t.name)}</option>`);
-  return (withAll?`<option value="all" ${sel==="all"?"selected":""}>Toutes les équipes</option>`:"")+opts.join("");
+  return (withAll?`<option value="all" ${sel==="all"?"selected":""}>All teams</option>`:"")+opts.join("");
 }
 function locOptions(sel){
   return config.locations.map(l=>`<option value="${l.id}" ${sel===l.id?"selected":""}>${esc(l.name)}</option>`).join("");
 }
+function toggleTeam(id){
+  if(collapsedTeams.has(id)) collapsedTeams.delete(id); else collapsedTeams.add(id);
+}
+function teamHeaderRow(t, memberCount, colspan){
+  const collapsed = collapsedTeams.has(t.id);
+  return `<tr class="teamhead"><td colspan="${colspan}" style="border-left:4px solid ${teamColor(t.id)}">
+    <button class="teamtoggle" data-teamtoggle="${t.id}" title="${collapsed?"Expand":"Collapse"}">${collapsed?"▶":"▼"}</button>
+    ${esc(t.name)} <span class="muted">(${memberCount} pers.)</span>
+  </td></tr>`;
+}
 
 function renderTabs(){
   const tabs = [
-    {id:"me",   label:"Mon espace"},
-    {id:"cal",  label:"Calendrier équipe"},
+    {id:"me",   label:"My space"},
+    {id:"cal",  label:"Team calendar"},
   ];
   if(isCdp()){
     tabs.push({id:"capa", label:"Capacity plan"});
-    tabs.push({id:"proj", label:"Projets"});
+    tabs.push({id:"proj", label:"Projects"});
   }
   if(isAdmin()){
     const pend = requests.filter(r=>r.status==="pending").length;
-    tabs.push({id:"valid", label:"Validation"+(pend?` (${pend})`:"")});
-    tabs.push({id:"team",  label:"Équipes & soldes"});
-    tabs.push({id:"settings", label:"Paramètres"});
+    tabs.push({id:"valid", label:"Approvals"+(pend?` (${pend})`:"")});
+    tabs.push({id:"team",  label:"Teams & balances"});
+    tabs.push({id:"settings", label:"Settings"});
   }
   document.getElementById("tabs").innerHTML = tabs.map(t=>
     `<button data-tab="${t.id}" class="${currentTab===t.id?'active':''}">${t.label}</button>`).join("");
@@ -843,24 +864,24 @@ function render(){
   bindAfterRender();
 }
 
-/* ---------- Formulaire de demande (réutilisé) ---------- */
+/* ---------- Leave request form (reused) ---------- */
 function requestForm(idPrefix, withPerson){
   const people = sortPeople(activePeople());
   return `
-    ${withPerson? `<label>Personne</label>
+    ${withPerson? `<label>Person</label>
       <select id="${idPrefix}-person">${people.map(p=>`<option value="${p.id}" ${p.id===currentUser.id?"selected":""}>${esc(personLabel(p))}</option>`).join("")}</select>`:""}
     <div class="formgrid">
       <div><label>Type</label>
         <select id="${idPrefix}-type">${Object.entries(TYPES).map(([k,t])=>`<option value="${k}">${t.label}</option>`).join("")}</select></div>
-      <div><label>Du</label><input type="date" id="${idPrefix}-start" value="${todayIso()}"></div>
-      <div><label>Au</label><input type="date" id="${idPrefix}-end" value="${todayIso()}"></div>
-      <div><label>Demi-journée (si 1 jour)</label>
-        <select id="${idPrefix}-half"><option value="">Journée complète</option><option value="AM">Matin</option><option value="PM">Après-midi</option></select></div>
+      <div><label>From</label><input type="date" id="${idPrefix}-start" value="${todayIso()}"></div>
+      <div><label>To</label><input type="date" id="${idPrefix}-end" value="${todayIso()}"></div>
+      <div><label>Half day (if 1 day)</label>
+        <select id="${idPrefix}-half"><option value="">Full day</option><option value="AM">Morning</option><option value="PM">Afternoon</option></select></div>
     </div>
-    <label>Commentaire (facultatif)</label>
-    <input id="${idPrefix}-comment" placeholder="ex : vacances d'été">
+    <label>Comment (optional)</label>
+    <input id="${idPrefix}-comment" placeholder="e.g. summer holiday">
     <div style="margin-top:12px" class="actions">
-      <button class="btn" id="${idPrefix}-submit">Enregistrer la demande</button>
+      <button class="btn" id="${idPrefix}-submit">Submit request</button>
       <span class="muted" id="${idPrefix}-days"></span>
     </div>`;
 }
@@ -873,16 +894,16 @@ function requestRow(r, showPerson){
   return `<tr>
     ${showPerson?`<td>${esc(p?.name||"?")}</td>`:""}
     <td><span class="pill" style="background:${t.hex}">${t.label}</span></td>
-    <td>${fmtFr(r.start)}${r.start!==r.end?" → "+fmtFr(r.end):""}${r.half?` (${r.half==="AM"?"matin":"après-midi"})`:""}</td>
-    <td>${days} j</td>
+    <td>${fmtDate(r.start)}${r.start!==r.end?" → "+fmtDate(r.end):""}${r.half?` (${r.half==="AM"?"morning":"afternoon"})`:""}</td>
+    <td>${days} d</td>
     <td><span class="pill st-${r.status}">${STATUS[r.status]}</span>
-        ${r.status!=="pending" && r.decidedBy && TYPES[r.type].needsApproval ? `<div class="muted">par ${esc(personById(r.decidedBy)?.name||"?")}${r.decisionComment?" — "+esc(r.decisionComment):""}</div>`:""}</td>
+        ${r.status!=="pending" && r.decidedBy && TYPES[r.type].needsApproval ? `<div class="muted">by ${esc(personById(r.decidedBy)?.name||"?")}${r.decisionComment?" — "+esc(r.decisionComment):""}</div>`:""}</td>
     <td>${esc(r.comment||"")}</td>
     <td>${canCancel?`<button class="btn small danger" data-del="${r.id}">✕</button>`:""}</td>
   </tr>`;
 }
 
-/* ---------- Vue : Mon espace ---------- */
+/* ---------- View: My space ---------- */
 function viewMe(){
   const y = new Date().getFullYear();
   const b = balances(currentUser, y);
@@ -891,39 +912,39 @@ function viewMe(){
   const ext = (currentUser.contract||"interne")==="externe";
   const target = contractTarget(currentUser);
   const kpis = `
-    <div class="kpi"><div class="v" style="color:var(--cp)">${b.cpLeft}</div><div class="l">CP restants ${y} (sur ${currentUser.cp||0})</div></div>
-    <div class="kpi"><div class="v" style="color:var(--rtt)">${b.rttLeft}</div><div class="l">RTT restants ${y} (sur ${currentUser.rtt||0})</div></div>
-    ${ext?`<div class="kpi"><div class="v" style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}">${b.projWorked}</div><div class="l">Jours travaillés projetés ${y} (cible ${target})</div></div>`:""}
+    <div class="kpi"><div class="v" style="color:var(--cp)">${b.cpLeft}</div><div class="l">Paid leave left ${y} (of ${currentUser.cp||0})</div></div>
+    <div class="kpi"><div class="v" style="color:var(--rtt)">${b.rttLeft}</div><div class="l">RTT left ${y} (of ${currentUser.rtt||0})</div></div>
+    ${ext?`<div class="kpi"><div class="v" style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}">${b.projWorked}</div><div class="l">Projected worked days ${y} (target ${target})</div></div>`:""}
   `;
   return `
   <div class="kpis">
     ${kpis}
-    <div class="kpi"><div class="v" style="color:#f59e0b">${b.pendingAll}</div><div class="l">Jours en attente de validation</div></div>
-    <div class="kpi"><div class="v" style="color:var(--tt)">${b.tt}</div><div class="l">Jours de télétravail ${y}</div></div>
-    <div class="kpi"><div class="v" style="color:var(--mal)">${b.sick+b.abs}</div><div class="l">Maladie / imprévu ${y}</div></div>
+    <div class="kpi"><div class="v" style="color:#f59e0b">${b.pendingAll}</div><div class="l">Days awaiting approval</div></div>
+    <div class="kpi"><div class="v" style="color:var(--tt)">${b.tt}</div><div class="l">Remote work days ${y}</div></div>
+    <div class="kpi"><div class="v" style="color:var(--mal)">${b.sick+b.abs}</div><div class="l">Sick / unplanned ${y}</div></div>
   </div>
   <div class="row" style="margin-top:16px">
     <div class="card" style="flex:1.2">
-      <h2>➕ Nouvelle demande</h2>
-      ${isAdmin()?`<div class="notice info">Vous êtes administrateur : le champ « Personne » ci-dessous permet de
-      saisir pour vous-même ou pour n'importe quel membre de l'équipe (utile pour un arrêt maladie ou une
-      régularisation).</div>`:""}
+      <h2>➕ New request</h2>
+      ${isAdmin()?`<div class="notice info">You're an administrator: the "Person" field below lets you
+      submit a request for yourself or for any team member (handy for a sick leave entry or a correction).</div>`:""}
       ${requestForm("nf", isAdmin())}
-      <p class="muted" style="margin-top:10px">Congés payés, RTT et congés sans solde sont soumis à validation
-      (sauf saisie par un administrateur, auto-validée). Télétravail, arrêt maladie et absence imprévue sont
-      enregistrés directement. Les jours sont décomptés selon les fériés du lieu de la personne sélectionnée.</p>
+      <p class="muted" style="margin-top:10px">Paid leave, RTT and unpaid leave require approval
+      (unless submitted by an administrator, which is auto-approved). Remote work, sick leave, unplanned
+      absence and training are recorded immediately. Days are counted against the public holidays of the
+      selected person's location.</p>
     </div>
     <div class="card" style="flex:2">
-      <h2>📋 Mes demandes & absences</h2>
+      <h2>📋 My requests &amp; absences</h2>
       ${mine.length? `<div style="overflow-x:auto"><table>
-        <tr><th>Type</th><th>Dates</th><th>Jours</th><th>Statut</th><th>Commentaire</th><th></th></tr>
+        <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Comment</th><th></th></tr>
         ${mine.map(r=>requestRow(r,false)).join("")}</table></div>`
-        : `<p class="muted">Aucune demande pour le moment.</p>`}
+        : `<p class="muted">No requests yet.</p>`}
     </div>
   </div>`;
 }
 
-/* ---------- Vue : Calendrier ---------- */
+/* ---------- View: Calendar ---------- */
 function dayInfo(personId, dIso){
   const rs = requests.filter(r=>r.personId===personId && r.start<=dIso && r.end>=dIso && r.status!=="rejected");
   if(!rs.length) return null;
@@ -935,36 +956,39 @@ function viewCalendar(){
   const first = new Date(y,m,1), nDays = new Date(y,m+1,0).getDate();
   let people = sortPeople(activePeople());
   if(calTeam!=="all") people = people.filter(p=>p.teamId===calTeam);
-  const monthName = first.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  const monthName = first.toLocaleDateString("en-GB",{month:"long",year:"numeric"});
   const holByLoc = {};
   for(const l of config.locations) holByLoc[l.id] = locHolidaySet(l.id);
 
   const daysHead = [];
   for(let d=1; d<=nDays; d++){
     const dt = new Date(y,m,d);
-    daysHead.push(`<th>${"DLMMJVS"[dt.getDay()]}<br>${d}</th>`);
+    daysHead.push(`<th>${"SMTWTFS"[dt.getDay()]}<br>${d}</th>`);
   }
   const teamsToShow = calTeam==="all" ? config.teams : config.teams.filter(t=>t.id===calTeam);
   const rows = [];
   for(const t of teamsToShow){
     const members = people.filter(p=>p.teamId===t.id);
     if(!members.length) continue;
-    rows.push(`<tr class="teamhead"><td colspan="${nDays+1}" style="border-left:4px solid ${teamColor(t.id)}">${esc(t.name)} <span class="muted">(${members.length} pers.)</span></td></tr>`);
+    rows.push(teamHeaderRow(t, members.length, nDays+1));
+    if(collapsedTeams.has(t.id)) continue;
     for(const p of members){
       const hs = holByLoc[p.locationId] || new Set();
       const cells=[];
       for(let d=1; d<=nDays; d++){
         const dt=new Date(y,m,d), dIso=iso(dt);
+        if(p.endDate && dIso>p.endDate){ cells.push(`<td class="left" title="Left the team on ${fmtDate(p.endDate)}">·</td>`); continue; }
         if(isWeekend(dt)){ cells.push(`<td class="we"></td>`); continue; }
-        if(hs.has(dIso)){ cells.push(`<td class="hol" title="${esc(locHolidayLabel(p.locationId,dIso)||'Férié')} (${esc(locById(p.locationId)?.name||'')})">F</td>`); continue; }
+        if(hs.has(dIso)){ cells.push(`<td class="hol" title="${esc(locHolidayLabel(p.locationId,dIso)||'Public holiday')} (${esc(locById(p.locationId)?.name||'')})">H</td>`); continue; }
         const r = dayInfo(p.id,dIso);
         if(!r){ cells.push(`<td></td>`); continue; }
         const t2 = TYPES[r.type];
         const pend = r.status==="pending";
         cells.push(`<td class="absent ${pend?'pending-cell':''}" style="background:${t2.hex}"
-          title="${t2.label}${pend?' (en attente)':''} — ${esc(personLabel(p))}">${r.type==="TT"?"T":r.type[0]}</td>`);
+          title="${t2.label}${pend?' (pending)':''} — ${esc(personLabel(p))}">${t2.letter}</td>`);
       }
-      rows.push(`<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(locById(p.locationId)?.name||"")} · ${esc(CONTRACTS[p.contract||"interne"].label)}</span></td>${cells.join("")}</tr>`);
+      const endNote = p.endDate ? ` · Ends ${fmtDate(p.endDate)}` : "";
+      rows.push(`<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(locById(p.locationId)?.name||"")} · ${esc(CONTRACTS[p.contract||"interne"].label)}${endNote}</span></td>${cells.join("")}</tr>`);
     }
   }
   const capCells=[];
@@ -973,7 +997,8 @@ function viewCalendar(){
     if(isWeekend(dt)){ capCells.push(`<td class="we"></td>`); continue; }
     let avail=0;
     for(const p of people){
-      if((holByLoc[p.locationId]||new Set()).has(dIso)) continue; // férié pour cette personne
+      if(p.endDate && dIso>p.endDate) continue; // already left the team
+      if((holByLoc[p.locationId]||new Set()).has(dIso)) continue; // public holiday for this person
       const r = dayInfo(p.id,dIso);
       if(!r || r.status!=="approved" || !TYPES[r.type].absent) avail++;
     }
@@ -985,29 +1010,33 @@ function viewCalendar(){
       <button class="btn small secondary" id="cal-prev">◀</button>
       <b style="min-width:160px; text-align:center; text-transform:capitalize">${monthName}</b>
       <button class="btn small secondary" id="cal-next">▶</button>
-      <button class="btn small secondary" id="cal-today">Aujourd'hui</button>
+      <button class="btn small secondary" id="cal-today">Today</button>
       <select id="cal-team" style="max-width:220px">${teamOptions(calTeam,true)}</select>
-      <span class="muted">Effectif affiché : ${people.length}, regroupé par équipe — cases estompées = en attente. Les fériés (F) dépendent du lieu de chacun.</span>
+      <span class="muted">Shown: ${people.length}, grouped by team — dimmed cells = pending. Public holidays (H) depend on each person's location.</span>
     </div>
     <div class="calwrap">
       <table class="cal">
-        <tr><th class="person">Personne</th>${daysHead.join("")}</tr>
+        <tr><th class="person">Person</th>${daysHead.join("")}</tr>
         ${rows.join("")}
-        <tr class="caprow"><td class="person">Disponibles</td>${capCells.join("")}</tr>
+        <tr class="caprow"><td class="person">Available</td>${capCells.join("")}</tr>
       </table>
     </div>
     <div class="legend">
-      ${Object.entries(TYPES).map(([k,t])=>`<span><span class="sw" style="background:${t.hex}"></span>${t.label} (${k==="TT"?"T":k[0]})</span>`).join("")}
-      <span><span class="sw" style="background:#fde68a"></span>Férié du lieu (F)</span>
-      <span><span class="sw" style="background:#eef1f5"></span>Week-end</span>
+      ${Object.entries(TYPES).map(([k,t])=>`<span><span class="sw" style="background:${t.hex}"></span>${t.label} (${t.letter})</span>`).join("")}
+      <span><span class="sw" style="background:#fde68a"></span>Public holiday (H)</span>
+      <span><span class="sw" style="background:#eef1f5"></span>Weekend</span>
     </div>
   </div>`;
 }
 
-/* ---------- Capacity plan : calculs ---------- */
+/* ---------- Capacity plan: calculations ---------- */
 function monthBounds(y,m){ return [iso(new Date(y,m,1)), iso(new Date(y,m+1,0))]; }
 function personMonthOpen(p,y,m){
   const [a,b]=monthBounds(y,m);
+  if(p.endDate){
+    if(p.endDate<a) return 0; // already left before this month
+    if(p.endDate<b) return openDaysSet(a,p.endDate,null,locHolidaySet(p.locationId)); // leaves mid-month
+  }
   return openDaysSet(a,b,null,locHolidaySet(p.locationId));
 }
 function personMonthAbsent(p,y,m,status){
@@ -1029,16 +1058,18 @@ function personMonthAllocPct(p,y,m){
   }
   return pct;
 }
-/* Simulation : lisse la prise de congés restante sur les mois restants de
-   l'année pour la projeter. Année passée -> 0 ; année en cours -> à partir
-   du mois courant ; année future -> dès janvier.
-   - Interne : solde CP+RTT restant, réparti uniformément.
-   - Externe : pas de solde de référence — on part de la cible de jours
-     travaillés (ex. 210/an). Le nombre de jours de congé "autorisés" sur
-     l'année = jours ouvrés de l'année − cible ; on en retranche ceux déjà
-     posés (validés), et on répartit le reste sur les mois restants, pour
-     estimer combien de jours il lui reste à poser tout en tenant sa cible. */
+/* Simulation: smooths the remaining leave to be taken over the remaining
+   months of the year, to project it. Past year -> 0 ; current year ->
+   starting this month ; future year -> starting in January.
+   - Internal: remaining CP+RTT balance, spread evenly.
+   - External: no reference balance — start from the target of worked
+     days (e.g. 210/year). "Allowed" days off for the year = business
+     days in the year − target ; subtract what's already been taken
+     (approved), and spread the rest over the remaining months, to
+     estimate how many days off they still have left while hitting
+     their target. */
 function personMonthSmoothLeave(p,y,m){
+  if(personMonthOpen(p,y,m)<=0) return 0; // already left the team by this month — nothing to smooth
   const todayY=now.getFullYear(), todayM=now.getMonth();
   if(y<todayY) return 0;
   const startMonth = y===todayY ? todayM : 0;
@@ -1055,9 +1086,10 @@ function personMonthSmoothLeave(p,y,m){
   }
   return remaining/remainingMonths;
 }
-/* Capacité restante = jours ouvrés du lieu − absences VALIDÉES − affectations
-   projets (% du mois) [− simulation CP/RTT lissés, si activée].
-   Les demandes en attente ne sont jamais déduites. */
+/* Remaining capacity = business days for the location − APPROVED absences
+   − project allocations (% of the month) [− smoothed leave simulation, if
+   enabled]. Pending requests are never deducted. Business days already
+   account for a scheduled contract end date (see personMonthOpen). */
 function personMonthRemaining(p,y,m,smooth){
   const open = personMonthOpen(p,y,m);
   let v = open - personMonthAbsent(p,y,m,"approved") - open*personMonthAllocPct(p,y,m)/100;
@@ -1065,9 +1097,9 @@ function personMonthRemaining(p,y,m,smooth){
   return v;
 }
 function fmtDays(n){ n = Math.round(n*10)/10; return Number.isInteger(n) ? n : n.toFixed(1); }
-function monthName(y,m,short){ return new Date(y,m,1).toLocaleDateString("fr-FR",{month:short?"short":"long"}); }
+function monthName(y,m,short){ return new Date(y,m,1).toLocaleDateString("en-GB",{month:short?"short":"long"}); }
 
-/* ---------- Histogramme SVG : capacité restante ---------- */
+/* ---------- SVG bar chart: remaining capacity ---------- */
 const TEAM_COLORS = ["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#4a3aa7","#e34948"];
 const teamColor = tid => TEAM_COLORS[Math.max(0,config.teams.findIndex(t=>t.id===tid)) % TEAM_COLORS.length];
 function niceStep(x){
@@ -1100,11 +1132,11 @@ function capacityChart(seriesList, y){
       const hgt=Math.max(Math.abs(sy(v)-y0),0.5);
       bars += `<rect x="${x}" y="${v>=0?sy(v):y0}" width="${bw}" height="${hgt}" fill="${s.color}" rx="2"`+
               `${v<-0.001?' stroke="#d03b3b" stroke-width="1.5"':''}>`+
-              `<title>${esc(s.label)} — ${monthName(y,m,false)} ${y} : ${fmtDays(v)} j-p restants</title></rect>`;
+              `<title>${esc(s.label)} — ${monthName(y,m,false)} ${y}: ${fmtDays(v)} person-days left</title></rect>`;
     });
   }
   return `<div class="calwrap" style="margin-bottom:12px">
-    <svg width="${W}" height="${H}" role="img" aria-label="Capacité restante par équipe et par mois (jours-personnes)">
+    <svg width="${W}" height="${H}" role="img" aria-label="Remaining capacity by team and month (person-days)">
       ${grid}${bars}
       <line x1="${padL}" x2="${W-padR}" y1="${y0}" y2="${y0}" stroke="#c3c2b7" stroke-width="1"/>
       ${labels}
@@ -1113,19 +1145,19 @@ function capacityChart(seriesList, y){
 }
 function teamSkills(tid){
   return [...new Set(activePeople().filter(p=>p.teamId===tid && (p.skill||"").trim())
-                                   .map(p=>p.skill.trim()))].sort((a,b)=>a.localeCompare(b,"fr"));
+                                   .map(p=>p.skill.trim()))].sort((a,b)=>a.localeCompare(b,"en"));
 }
 function viewCapacity(){
   const y = capYear;
   const curM = (y===now.getFullYear()) ? now.getMonth() : -1;
-  const head = `<tr><th class="person">${capTeam==="all"?"Équipe":"Personne"}</th>
-    ${[...Array(12)].map((_,m)=>`<th ${m===curM?'style="background:#dbeafe"':''}>${monthName(y,m,true)}</th>`).join("")}<th>Année</th></tr>`;
+  const head = `<tr><th class="person">${capTeam==="all"?"Team":"Person"}</th>
+    ${[...Array(12)].map((_,m)=>`<th ${m===curM?'style="background:#dbeafe"':''}>${monthName(y,m,true)}</th>`).join("")}<th>Year</th></tr>`;
 
   const cell = (v,pend,smooth,cur)=>{
     const neg = v<-0.001;
     let notes = "";
-    if(pend>0.001) notes += `<div class="pend-note" title="${fmtDays(pend)} j de congés en attente de validation — non déduits tant que non validés">−${fmtDays(pend)} ?</div>`;
-    if(smooth>0.001) notes += `<div class="smooth-note" title="Simulation : part lissée des CP/RTT restants de cette personne sur les mois restants de l'année (${fmtDays(smooth)} j ce mois-ci) — déjà déduite de la valeur ci-dessus">~${fmtDays(smooth)}</div>`;
+    if(pend>0.001) notes += `<div class="pend-note" title="${fmtDays(pend)} day(s) of leave awaiting approval — not deducted until approved">−${fmtDays(pend)} ?</div>`;
+    if(smooth>0.001) notes += `<div class="smooth-note" title="Simulation: smoothed share of this person's remaining leave for this month (${fmtDays(smooth)} d) — already deducted from the value above">~${fmtDays(smooth)}</div>`;
     return `<td${cur?' style="background:#eff6ff"':''}>${neg?`<span style="color:var(--danger); font-weight:700">${fmtDays(v)}</span>`:fmtDays(v)}${notes}</td>`;
   };
   const mkRow = (label, sub, vals, pends, smooths, strong)=>{
@@ -1180,50 +1212,50 @@ function viewCapacity(){
       <button class="btn small secondary" id="capa-next">▶</button>
       <select id="capa-team" style="max-width:240px">${teamOptions(capTeam,true)}</select>
       ${capTeam!=="all" && skills.length ? `<select id="capa-skill" style="max-width:200px">
-        <option value="all">Toutes les compétences</option>
+        <option value="all">All skills</option>
         ${skills.map(s=>`<option value="${esc(s)}" ${capSkill===s?"selected":""}>${esc(s)}</option>`).join("")}
       </select>`:""}
       <label style="display:inline; margin:0"><input type="checkbox" id="capa-smooth" ${capSmooth?"checked":""}>
-        Simuler la prise de congés restante (lissée sur l'année)</label>
+        Simulate remaining leave (smoothed over the year)</label>
     </div>
-    <h2>Capacité restante ${capTeam==="all"?"par équipe":"— "+esc(teamById(capTeam)?.name||"")} (jours-personnes)</h2>
+    <h2>Remaining capacity ${capTeam==="all"?"by team":"— "+esc(teamById(capTeam)?.name||"")} (person-days)</h2>
     ${capacityChart(series, y)}
     ${legend}
     <div class="calwrap">
       <table class="cal">${head}${rows.join("")}</table>
     </div>
-    <p class="muted" style="margin-top:10px">Capacité restante = jours ouvrés du mois selon le lieu de chacun
-    (week-ends et fériés locaux exclus) − absences <b>validées</b> − affectations projets (en % du mois, onglet Projets)
-    ${capSmooth?" − simulation de congés restants (voir « ~x » ci-dessous)":""}.
-    Les congés en attente apparaissent en orange (« −x ? ») mais n'impactent la capacité qu'une fois validés.
-    ${capSmooth?`La simulation « ~x » répartit uniformément, sur les mois restants de l'année, une estimation des
-    congés encore à poser : pour un <b>interne</b>, son solde CP+RTT restant ; pour un <b>externe</b>, l'écart entre
-    les jours ouvrés de l'année et sa cible de jours travaillés, moins ce qu'il a déjà posé — de quoi estimer combien
-    de jours il peut encore poser tout en tenant sa cible. C'est une projection indicative, pas une réservation
-    réelle (décochez la case pour revenir aux seules absences actées).`:""}
-    Le télétravail n'est pas déduit. Une valeur négative (rouge) signale une surcharge.</p>
+    <p class="muted" style="margin-top:10px">Remaining capacity = business days for the month at each person's
+    location (weekends and local public holidays excluded) − <b>approved</b> absences − project allocations
+    (% of the month, Projects tab)${capSmooth?" − remaining-leave simulation (see “~x” below)":""}.
+    Pending leave shows in orange ("−x ?") but only affects capacity once approved.
+    ${capSmooth?`The "~x" simulation spreads an estimate of remaining leave still to be taken evenly over the
+    remaining months of the year: for an <b>internal</b>, their remaining CP+RTT balance; for an <b>external</b>,
+    the gap between business days for the year and their worked-days target, minus what they've already taken —
+    an estimate of how many more days off they can take while still hitting their target. It's an indicative
+    projection, not an actual booking (uncheck the box to see only actual absences).`:""}
+    Remote work isn't deducted. A negative value (red) signals overcapacity.</p>
   </div>`;
 }
 
-/* ---------- Vue : Projets (chef de projet) ---------- */
+/* ---------- View: Projects (project manager) ---------- */
 function projectOverloads(y){
   const out=[];
   for(const p of activePeople()){
     for(let m=0;m<12;m++){
       const pct = personMonthAllocPct(p,y,m);
-      if(pct>100) out.push(`${personLabel(p)} — ${monthName(y,m,false)} ${y} : ${pct} % affectés (tous projets)`);
+      if(pct>100) out.push(`${personLabel(p)} — ${monthName(y,m,false)} ${y}: ${pct}% allocated (all projects)`);
     }
   }
   return out;
 }
-function targetLabel(t){ return `${teamById(t.teamId)?.name||"—"}${t.skill?" · "+t.skill:" (toutes compétences)"}`; }
+function targetLabel(t){ return `${teamById(t.teamId)?.name||"—"}${t.skill?" · "+t.skill:" (all skills)"}`; }
 function projectTargetSkills(pr){
   const set = new Set();
   for(const t of pr.targets||[]){ if(t.skill) set.add(t.skill); for(const s of teamSkills(t.teamId)) set.add(s); }
-  return [...set].sort((a,b)=>a.localeCompare(b,"fr"));
+  return [...set].sort((a,b)=>a.localeCompare(b,"en"));
 }
-/* Capacité planifiée SUR CE PROJET pour les personnes d'une compétence donnée
-   (vide = toutes), du mois courant jusqu'au mois de la date de fin incluse. */
+/* Capacity planned ON THIS PROJECT for people with a given skill (empty =
+   all), from the current month through the due month inclusive. */
 function workloadCalc(pr, w){
   if(!w.dueDate || w.dueDate<todayIso()) return {planned:0, months:0, overdue:true};
   const dd = fromIso(w.dueDate);
@@ -1248,9 +1280,9 @@ function workloadCalc(pr, w){
 function viewProjects(){
   const y = projYear;
   const pr = projects.find(p=>p.id===projSel);
-  const list = [...projects].sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  const list = [...projects].sort((a,b)=>a.name.localeCompare(b.name,"en"));
   const listHtml = list.length ? `<div style="overflow-x:auto"><table>
-    <tr><th>Projet</th><th>Cibles équipe/compétence</th><th>Personnes affectées</th><th>Actif</th><th></th></tr>
+    <tr><th>Project</th><th>Team/skill targets</th><th>People allocated</th><th>Active</th><th></th></tr>
     ${list.map(p=>{
       const n = Object.keys(p.allocations||{}).length;
       const chips = (p.targets||[]).map(t=>
@@ -1262,25 +1294,25 @@ function viewProjects(){
         <td>${n||"—"}</td>
         <td style="text-align:center"><input type="checkbox" data-pract="${p.id}" ${p.active!==false?"checked":""}></td>
         <td class="actions">
-          <button class="btn small" data-popen="${p.id}">Affectations</button>
+          <button class="btn small" data-popen="${p.id}">Allocations</button>
           <button class="btn small danger" data-pdel-proj="${p.id}">✕</button>
         </td></tr>`;
     }).join("")}
-  </table></div>` : `<p class="muted">Aucun projet pour le moment — créez le premier ci-dessous.</p>`;
+  </table></div>` : `<p class="muted">No projects yet — create the first one below.</p>`;
 
   const newSkills = teamSkills(config.teams[0].id);
   const createHtml = `
-    <h2 style="margin-top:16px">➕ Nouveau projet</h2>
+    <h2 style="margin-top:16px">➕ New project</h2>
     <div class="actions">
-      <input id="proj-new-name" placeholder="Nom du projet" style="max-width:220px">
+      <input id="proj-new-name" placeholder="Project name" style="max-width:220px">
       <select id="proj-new-team" style="max-width:220px">${teamOptions(config.teams[0].id,false)}</select>
-      <input id="proj-new-skill" list="proj-skill-dl" placeholder="Compétence visée (optionnel)" style="max-width:200px">
+      <input id="proj-new-skill" list="proj-skill-dl" placeholder="Target skill (optional)" style="max-width:200px">
       <datalist id="proj-skill-dl">${newSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
-      <button class="btn small" id="btn-add-proj">Créer</button>
+      <button class="btn small" id="btn-add-proj">Create</button>
     </div>
-    <p class="muted" style="margin-top:6px">La compétence est proposée d'après celles des membres de l'équipe choisie
-    (renseignées dans Paramètres → Personnes), mais reste libre ; laissez vide pour viser toute l'équipe.
-    D'autres cibles équipe/compétence pourront être ajoutées ensuite dans l'éditeur du projet.</p>`;
+    <p class="muted" style="margin-top:6px">The skill is suggested from the chosen team's members
+    (set in Settings → People), but stays free text; leave it blank to target the whole team.
+    More team/skill targets can be added afterwards in the project editor.</p>`;
 
   let editorHtml = "";
   if(pr){
@@ -1296,12 +1328,12 @@ function viewProjects(){
           return `<td><input type="number" min="0" max="100" step="5" style="width:52px; text-align:right"
             data-alloc="${p.id}|${key}" value="${a[key]||""}" placeholder="0"></td>`;
         }).join("")}
-        <td><button class="btn small danger" data-arem="${p.id}" title="Retirer du projet">✕</button></td></tr>`;
+        <td><button class="btn small danger" data-arem="${p.id}" title="Remove from project">✕</button></td></tr>`;
     }).join("");
     const overloads = projectOverloads(y);
     const targets = pr.targets||[];
     const targetsRows = targets.map((t,i)=>`<tr><td>${esc(teamById(t.teamId)?.name||"—")}</td>
-      <td>${esc(t.skill||"(toutes compétences)")}</td>
+      <td>${esc(t.skill||"(all skills)")}</td>
       <td><button class="btn small danger" data-tgtdel="${i}">✕</button></td></tr>`).join("");
     const tSkills = teamSkills(config.teams[0].id);
     const bulkOptions = targets.map((t,i)=>`<option value="${i}">${esc(targetLabel(t))}</option>`).join("");
@@ -1311,138 +1343,138 @@ function viewProjects(){
       const shortfall = w.remainingDays - c.planned;
       const reqPace = c.months>0 ? w.remainingDays/c.months : null;
       const planPace = c.months>0 ? c.planned/c.months : 0;
-      const verdict = c.overdue ? `<span class="pill st-rejected">Date dépassée</span>`
-        : (shortfall<=0.001 ? `<span class="pill st-approved">✅ Tenable</span>`
-                             : `<span class="pill st-rejected">⚠ Manque ${fmtDays(shortfall)} j-p</span>`);
+      const verdict = c.overdue ? `<span class="pill st-rejected">Overdue</span>`
+        : (shortfall<=0.001 ? `<span class="pill st-approved">✅ On track</span>`
+                             : `<span class="pill st-rejected">⚠ Short by ${fmtDays(shortfall)} d</span>`);
       return `<tr>
-        <td>${esc(w.skill||"(toutes compétences)")}</td>
+        <td>${esc(w.skill||"(all skills)")}</td>
         <td><input type="number" min="0" step="0.5" style="width:80px" data-wldays="${i}" value="${w.remainingDays}"></td>
         <td><input type="date" style="width:150px" data-wldue="${i}" value="${w.dueDate}"></td>
-        <td>${fmtDays(c.planned)} j-p${!c.overdue?` <span class="muted">(${c.months} mois)</span>`:""}</td>
-        <td>${reqPace!=null?fmtDays(reqPace)+" j/mois":"—"}</td>
-        <td>${fmtDays(planPace)} j/mois</td>
+        <td>${fmtDays(c.planned)} d${!c.overdue?` <span class="muted">(${c.months} mo.)</span>`:""}</td>
+        <td>${reqPace!=null?fmtDays(reqPace)+" d/mo":"—"}</td>
+        <td>${fmtDays(planPace)} d/mo</td>
         <td>${verdict}</td>
-        <td><button class="btn small danger" data-wldel="${i}" title="Supprimer">✕</button></td>
+        <td><button class="btn small danger" data-wldel="${i}" title="Delete">✕</button></td>
       </tr>`;
     }).join("");
     editorHtml = `
     <div class="card">
       <div class="actions" style="margin-bottom:10px">
-        <h2 style="margin:0">🗓 Affectations — ${esc(pr.name)}</h2>
+        <h2 style="margin:0">🗓 Allocations — ${esc(pr.name)}</h2>
         <button class="btn small secondary" id="proj-prev">◀</button>
         <b>${y}</b>
         <button class="btn small secondary" id="proj-next">▶</button>
-        <button class="btn small secondary" id="proj-close">Fermer</button>
+        <button class="btn small secondary" id="proj-close">Close</button>
       </div>
 
-      <h3>Cibles équipe / compétence</h3>
+      <h3>Team / skill targets</h3>
       <table>
-        <tr><th>Équipe</th><th>Compétence</th><th></th></tr>
-        ${targetsRows || `<tr><td colspan="3" class="muted">Aucune cible pour l'instant.</td></tr>`}
+        <tr><th>Team</th><th>Skill</th><th></th></tr>
+        ${targetsRows || `<tr><td colspan="3" class="muted">No target yet.</td></tr>`}
       </table>
       <div class="actions" style="margin-top:8px">
         <select id="tgt-new-team" style="max-width:220px">${teamOptions(config.teams[0].id,false)}</select>
-        <input id="tgt-new-skill" list="tgt-skill-dl" placeholder="Compétence (optionnel)" style="max-width:200px">
+        <input id="tgt-new-skill" list="tgt-skill-dl" placeholder="Skill (optional)" style="max-width:200px">
         <datalist id="tgt-skill-dl">${tSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
-        <button class="btn small" id="btn-add-target">Ajouter une cible</button>
+        <button class="btn small" id="btn-add-target">Add a target</button>
       </div>
-      <p class="muted" style="margin-top:6px">Un projet peut viser plusieurs équipes et/ou compétences ; chacune
-      peut ensuite être affectée en groupe ci-dessous.</p>
+      <p class="muted" style="margin-top:6px">A project can target several teams and/or skills; each
+      target can then be bulk-allocated below.</p>
 
-      <h3 style="margin-top:20px">Personnes affectées</h3>
+      <h3 style="margin-top:20px">People allocated</h3>
       ${allocated.length? `<div class="calwrap"><table class="cal">
-        <tr><th class="person">Personne</th>${[...Array(12)].map((_,m)=>`<th>${monthName(y,m,true)}</th>`).join("")}<th></th></tr>
+        <tr><th class="person">Person</th>${[...Array(12)].map((_,m)=>`<th>${monthName(y,m,true)}</th>`).join("")}<th></th></tr>
         ${rows}
-      </table></div>` : `<p class="muted">Aucune personne affectée pour l'instant.</p>`}
+      </table></div>` : `<p class="muted">No one allocated yet.</p>`}
       <div class="actions" style="margin-top:10px">
         <select id="proj-person-sel" style="max-width:240px">
           ${addable.map(p=>`<option value="${p.id}">${esc(personLabel(p))}</option>`).join("")}
         </select>
-        <button class="btn small" id="proj-add-person" ${addable.length?"":"disabled"}>Ajouter la personne</button>
-        <button class="btn small ok" id="btn-save-alloc" ${allocated.length?"":"disabled"}>💾 Enregistrer les affectations</button>
+        <button class="btn small" id="proj-add-person" ${addable.length?"":"disabled"}>Add person</button>
+        <button class="btn small ok" id="btn-save-alloc" ${allocated.length?"":"disabled"}>💾 Save allocations</button>
       </div>
-      <p class="muted" style="margin-top:8px">Affectation en % du temps de la personne, mois par mois — utile pour les
-      personnes transverses réparties sur plusieurs projets, y compris hors des équipes ciblées. Vide = 0 %.
-      La capacité restante (onglet Capacity plan) déduit ces affectations.</p>
-      ${overloads.length? `<div class="notice err" style="margin-top:8px"><b>Surcharge (&gt;100 % tous projets confondus) :</b><br>${overloads.map(esc).join("<br>")}</div>`:""}
+      <p class="muted" style="margin-top:8px">Allocation as a % of the person's time, month by month — useful for
+      cross-functional people spread across several projects, including from outside the targeted teams. Blank = 0%.
+      Remaining capacity (Capacity plan tab) deducts these allocations.</p>
+      ${overloads.length? `<div class="notice err" style="margin-top:8px"><b>Overallocation (&gt;100% across all projects):</b><br>${overloads.map(esc).join("<br>")}</div>`:""}
 
-      <h3 style="margin-top:20px">Affectation groupée — une cible équipe/compétence entière</h3>
-      ${targets.length? `<p class="muted">Affecte en une fois le même % à toutes les personnes actives correspondant à la cible choisie,
-      sur la période sélectionnée. Chaque personne reste ensuite modifiable individuellement ci-dessus.</p>
+      <h3 style="margin-top:20px">Bulk allocation — a whole team/skill target</h3>
+      ${targets.length? `<p class="muted">Allocates the same % in one go to every active person matching the chosen
+      target, over the selected period. Each person stays individually editable above afterwards.</p>
       <div class="actions">
         <select id="bulk-target" style="max-width:260px">${bulkOptions}</select>
-        <span class="muted">de</span> <select id="bulk-start-m" style="max-width:120px">${monthOpts(defStartM)}</select>
-        <span class="muted">à</span> <select id="bulk-end-m" style="max-width:120px">${monthOpts(11)}</select>
+        <span class="muted">from</span> <select id="bulk-start-m" style="max-width:120px">${monthOpts(defStartM)}</select>
+        <span class="muted">to</span> <select id="bulk-end-m" style="max-width:120px">${monthOpts(11)}</select>
         <span class="muted">%</span> <input type="number" id="bulk-pct" min="0" max="100" step="5" value="20" style="width:70px">
-        <button class="btn small" id="btn-bulk-alloc">Affecter le groupe</button>
-      </div>` : `<p class="muted">Ajoutez au moins une cible équipe/compétence ci-dessus pour affecter un groupe entier.</p>`}
+        <button class="btn small" id="btn-bulk-alloc">Allocate the group</button>
+      </div>` : `<p class="muted">Add at least one team/skill target above to bulk-allocate a whole group.</p>`}
 
-      <h3 style="margin-top:20px">Charge & délais (projection de capacité)</h3>
-      <p class="muted">Pour chaque compétence, indiquez la charge restante (en jours-personnes) et la date de fin
-      souhaitée : l'application compare la capacité déjà planifiée sur ce projet d'ici cette date à la charge à
-      réaliser, pour vérifier si le délai est tenable au rythme d'affectation actuel.</p>
+      <h3 style="margin-top:20px">Workload &amp; deadlines (capacity projection)</h3>
+      <p class="muted">For each skill, enter the remaining workload (in person-days) and the desired due date:
+      the app compares the capacity already planned on this project by that date against the work still to do,
+      to check whether the deadline is achievable at the current allocation pace.</p>
       ${(pr.workloads||[]).length? `<div style="overflow-x:auto"><table>
-        <tr><th>Compétence</th><th>Charge restante (j-p)</th><th>Date de fin</th><th>Capacité planifiée</th>
-            <th>Rythme requis</th><th>Rythme planifié</th><th>Verdict</th><th></th></tr>
+        <tr><th>Skill</th><th>Remaining workload (person-days)</th><th>Due date</th><th>Planned capacity</th>
+            <th>Required pace</th><th>Planned pace</th><th>Verdict</th><th></th></tr>
         ${workloadRows}
-      </table></div>` : `<p class="muted">Aucune ligne de charge pour l'instant.</p>`}
+      </table></div>` : `<p class="muted">No workload line yet.</p>`}
       <div class="actions" style="margin-top:8px">
-        <input id="wl-skill" list="wl-skill-dl" placeholder="Compétence" style="max-width:180px">
+        <input id="wl-skill" list="wl-skill-dl" placeholder="Skill" style="max-width:180px">
         <datalist id="wl-skill-dl">${wSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
-        <input type="number" id="wl-days" min="0" step="0.5" placeholder="Charge restante (j-p)" style="max-width:170px">
+        <input type="number" id="wl-days" min="0" step="0.5" placeholder="Remaining workload (person-days)" style="max-width:170px">
         <input type="date" id="wl-due" style="max-width:160px">
-        <button class="btn small" id="btn-add-workload">Ajouter la ligne</button>
-        <button class="btn small ok" id="btn-save-workloads" ${(pr.workloads||[]).length?"":"disabled"}>💾 Enregistrer les charges</button>
+        <button class="btn small" id="btn-add-workload">Add line</button>
+        <button class="btn small ok" id="btn-save-workloads" ${(pr.workloads||[]).length?"":"disabled"}>💾 Save workloads</button>
       </div>
     </div>`;
   }
 
   return `
   <div class="card">
-    <h2>📁 Projets</h2>
-    <p class="muted" style="margin-bottom:10px">Un projet peut viser plusieurs équipes et/ou compétences ;
-    les affectations peuvent néanmoins inclure des personnes d'autres équipes (transverses).</p>
+    <h2>📁 Projects</h2>
+    <p class="muted" style="margin-bottom:10px">A project can target several teams and/or skills;
+    allocations can nonetheless include people from other teams (cross-functional).</p>
     ${listHtml}
     ${createHtml}
   </div>
   ${editorHtml}`;
 }
 
-/* ---------- Vue : Validation (admin) ---------- */
+/* ---------- View: Approvals (admin) ---------- */
 function viewValidation(){
   const pend = requests.filter(r=>r.status==="pending").sort((a,b)=>a.start.localeCompare(b.start));
   return `
   <div class="card">
-    <h2>✅ Demandes en attente de validation</h2>
+    <h2>✅ Requests awaiting approval</h2>
     ${pend.length? `<div style="overflow-x:auto"><table>
-      <tr><th>Personne</th><th>Équipe</th><th>Type</th><th>Dates</th><th>Jours</th><th>Commentaire</th><th>Demandé le</th><th>Action</th></tr>
+      <tr><th>Person</th><th>Team</th><th>Type</th><th>Dates</th><th>Days</th><th>Comment</th><th>Requested on</th><th>Action</th></tr>
       ${pend.map(r=>{
         const t=TYPES[r.type], p=personById(r.personId);
         return `<tr>
           <td><b>${esc(p?.name||"?")}</b></td>
           <td>${esc(teamById(p?.teamId)?.name||"—")}</td>
           <td><span class="pill" style="background:${t.hex}">${t.label}</span></td>
-          <td>${fmtFr(r.start)}${r.start!==r.end?" → "+fmtFr(r.end):""}${r.half?` (${r.half==="AM"?"matin":"après-midi"})`:""}</td>
-          <td>${p?openDaysP(r.start,r.end,r.half,p):"?"} j</td>
+          <td>${fmtDate(r.start)}${r.start!==r.end?" → "+fmtDate(r.end):""}${r.half?` (${r.half==="AM"?"morning":"afternoon"})`:""}</td>
+          <td>${p?openDaysP(r.start,r.end,r.half,p):"?"} d</td>
           <td>${esc(r.comment||"")}</td>
-          <td>${new Date(r.createdAt).toLocaleDateString("fr-FR")}</td>
+          <td>${new Date(r.createdAt).toLocaleDateString("en-GB")}</td>
           <td class="actions">
-            <button class="btn small ok" data-approve="${r.id}">Valider</button>
-            <button class="btn small danger" data-reject="${r.id}">Refuser</button>
+            <button class="btn small ok" data-approve="${r.id}">Approve</button>
+            <button class="btn small danger" data-reject="${r.id}">Reject</button>
           </td></tr>`;
       }).join("")}</table></div>`
-      : `<p class="muted">🎉 Aucune demande en attente.</p>`}
+      : `<p class="muted">🎉 No requests awaiting approval.</p>`}
   </div>
   <div class="card">
-    <h2>Historique des décisions récentes</h2>
+    <h2>Recent decisions</h2>
     <div style="overflow-x:auto"><table>
-      <tr><th>Personne</th><th>Type</th><th>Dates</th><th>Statut</th><th>Décidé par</th><th></th></tr>
+      <tr><th>Person</th><th>Type</th><th>Dates</th><th>Status</th><th>Decided by</th><th></th></tr>
       ${requests.filter(r=>r.status!=="pending" && TYPES[r.type].needsApproval)
         .sort((a,b)=>(b.decidedAt||"").localeCompare(a.decidedAt||"")).slice(0,15)
         .map(r=>`<tr>
           <td>${esc(personById(r.personId)?.name||"?")}</td>
           <td>${TYPES[r.type].label}</td>
-          <td>${fmtFr(r.start)}${r.start!==r.end?" → "+fmtFr(r.end):""}</td>
+          <td>${fmtDate(r.start)}${r.start!==r.end?" → "+fmtDate(r.end):""}</td>
           <td><span class="pill st-${r.status}">${STATUS[r.status]}</span></td>
           <td>${esc(personById(r.decidedBy)?.name||"—")}</td>
           <td><button class="btn small danger" data-del="${r.id}">✕</button></td>
@@ -1451,7 +1483,7 @@ function viewValidation(){
   </div>`;
 }
 
-/* ---------- Vue : Équipes & soldes (admin) ---------- */
+/* ---------- View: Teams & balances (admin) ---------- */
 function viewTeam(){
   const y = new Date().getFullYear();
   const teamsToShow = teamViewFilter==="all" ? config.teams : config.teams.filter(t=>t.id===teamViewFilter);
@@ -1459,13 +1491,15 @@ function viewTeam(){
   for(const t of teamsToShow){
     const members = sortPeople(activePeople().filter(p=>p.teamId===t.id));
     if(!members.length) continue;
-    rowsHtml.push(`<tr class="teamhead"><td colspan="11" style="border-left:4px solid ${teamColor(t.id)}">${esc(t.name)} <span class="muted">(${members.length} pers.)</span></td></tr>`);
+    rowsHtml.push(teamHeaderRow(t, members.length, 11));
+    if(collapsedTeams.has(t.id)) continue;
     for(const p of members){
       const b = balances(p,y);
       const target = contractTarget(p);
+      const endNote = p.endDate ? `<br><span class="sub">Ends ${fmtDate(p.endDate)}</span>` : "";
       rowsHtml.push(`<tr><td><b>${esc(personLabel(p))}</b>
         ${(p.roles||[]).includes("admin")?'<span class="badge admin">Admin</span>':""}
-        ${(p.roles||[]).includes("cdp")?'<span class="badge cdp">CdP</span>':""}</td>
+        ${(p.roles||[]).includes("cdp")?'<span class="badge cdp">PM</span>':""}${endNote}</td>
         <td>${esc(locById(p.locationId)?.name||"—")}</td>
         <td><span class="badge ${p.contract||"interne"}">${CONTRACTS[p.contract||"interne"].label}</span></td>
         <td><b>${b.cpLeft}</b> / ${p.cp||0}</td>
@@ -1479,30 +1513,30 @@ function viewTeam(){
   return `
   <div class="card">
     <div class="actions" style="margin-bottom:10px">
-      <h2 style="margin:0">👥 Soldes & capacité — ${y}</h2>
+      <h2 style="margin:0">👥 Teams &amp; balances — ${y}</h2>
       <select id="team-filter" style="max-width:220px">${teamOptions(teamViewFilter,true)}</select>
     </div>
     <div style="overflow-x:auto"><table>
-      <tr><th>Personne</th><th>Lieu</th><th>Contrat</th>
-          <th>CP restants</th><th>RTT restants</th><th>En attente</th>
-          <th>Maladie</th><th>Imprévus</th><th>Télétravail</th>
-          <th>Cible j. travaillés</th><th>Projeté</th></tr>
+      <tr><th>Person</th><th>Location</th><th>Contract</th>
+          <th>Paid leave left</th><th>RTT left</th><th>Pending</th>
+          <th>Sick</th><th>Unplanned</th><th>Remote</th>
+          <th>Target worked days</th><th>Projected</th></tr>
       ${rowsHtml.join("")}
     </table></div>
-    <p class="muted" style="margin-top:8px">Regroupé par équipe (filtrable ci-dessus). « Projeté » = jours ouvrés de
-    l'année selon le lieu (${config.locations.map(l=>`${esc(l.name)} : ${businessDaysYear(l.id,y)} j`).join(" · ")})
-    moins les absences validées.</p>
-    <div style="margin-top:8px"><button class="btn secondary small" id="btn-export-csv">⬇ Exporter toutes les demandes (CSV)</button></div>
+    <p class="muted" style="margin-top:8px">Grouped by team (filterable above, expand/collapse with the ▼/▶ button).
+    "Projected" = business days for the year at each location (${config.locations.map(l=>`${esc(l.name)}: ${businessDaysYear(l.id,y)} d`).join(" · ")})
+    minus approved absences.</p>
+    <div style="margin-top:8px"><button class="btn secondary small" id="btn-export-csv">⬇ Export all requests (CSV)</button></div>
   </div>
   <div class="card">
-    <h2>➕ Saisir une absence pour un membre</h2>
-    <p class="muted">En tant qu'administrateur, votre saisie est validée automatiquement
-    (utile pour enregistrer un arrêt maladie ou régulariser un congé).</p>
+    <h2>➕ Submit an absence for a team member</h2>
+    <p class="muted">As an administrator, your entry is approved automatically
+    (handy for recording a sick leave or correcting a leave record).</p>
     ${requestForm("af", true)}
   </div>`;
 }
 
-/* ---------- Vue : Paramètres (admin) ---------- */
+/* ---------- View: Settings (admin) ---------- */
 function viewSettings(){
   const people = sortPeople(config.people);
   if(!settingsLoc || !locById(settingsLoc)) settingsLoc = config.locations[0].id;
@@ -1512,115 +1546,119 @@ function viewSettings(){
   const y = new Date().getFullYear();
   return `
   <div class="card">
-    <h2>👤 Personnes</h2>
+    <h2>👤 People</h2>
     <div style="overflow-x:auto"><table>
-      <tr><th>Nom</th><th>Login Windows</th><th>Profils</th><th>Compétence</th><th>Équipe</th><th>Lieu</th><th>Contrat</th>
-          <th>CP/an</th><th>RTT/an</th><th>Cible j.</th><th>Actif</th><th></th></tr>
+      <tr><th>Name</th><th>Windows login</th><th>Profiles</th><th>Skill</th><th>Team</th><th>Location</th><th>Contract</th>
+          <th>Paid leave/yr</th><th>RTT/yr</th><th>Target d.</th><th>End date</th><th>Active</th><th></th></tr>
       ${people.map(p=>`<tr>
         <td><input style="min-width:130px" data-pname="${p.id}" value="${esc(p.name)}"></td>
         <td><input style="min-width:90px" data-plogin="${p.id}" value="${esc(p.winLogin||"")}" placeholder="login"></td>
         <td style="white-space:nowrap">
           <label style="display:inline; margin:0; font-size:12px"><input type="checkbox" data-padmin="${p.id}" ${(p.roles||[]).includes("admin")?"checked":""}> Admin</label><br>
-          <label style="display:inline; margin:0; font-size:12px"><input type="checkbox" data-pcdp="${p.id}" ${(p.roles||[]).includes("cdp")?"checked":""}> Chef de projet</label>
+          <label style="display:inline; margin:0; font-size:12px"><input type="checkbox" data-pcdp="${p.id}" ${(p.roles||[]).includes("cdp")?"checked":""}> Project manager</label>
         </td>
-        <td><input style="min-width:100px" data-pskill="${p.id}" value="${esc(p.skill||"")}" placeholder="ex : Data eng."></td>
+        <td><input style="min-width:100px" data-pskill="${p.id}" value="${esc(p.skill||"")}" placeholder="e.g. Data eng."></td>
         <td><select data-pteam="${p.id}">${teamOptions(p.teamId,false)}</select></td>
         <td><select data-ploc="${p.id}">${locOptions(p.locationId)}</select></td>
-        <td><select data-pcontract="${p.id}"><option value="interne" ${p.contract!=="externe"?"selected":""}>Interne</option><option value="externe" ${p.contract==="externe"?"selected":""}>Externe</option></select></td>
+        <td><select data-pcontract="${p.id}"><option value="interne" ${p.contract!=="externe"?"selected":""}>Internal</option><option value="externe" ${p.contract==="externe"?"selected":""}>External</option></select></td>
         <td><input type="number" step="0.5" min="0" style="width:65px" data-pcp="${p.id}" value="${p.cp||0}"></td>
         <td><input type="number" step="0.5" min="0" style="width:65px" data-prtt="${p.id}" value="${p.rtt||0}"></td>
         <td><input type="number" step="1" min="0" style="width:65px" data-ptarget="${p.id}" value="${contractTarget(p)}"></td>
+        <td><input type="date" style="min-width:135px" data-pend="${p.id}" value="${p.endDate||""}"></td>
         <td style="text-align:center"><input type="checkbox" data-pactive="${p.id}" ${p.active!==false?"checked":""}></td>
-        <td>${p.id!==currentUser.id?`<button class="btn small danger" data-pdel="${p.id}" title="Supprimer">✕</button>`:""}</td>
+        <td>${p.id!==currentUser.id?`<button class="btn small danger" data-pdel="${p.id}" title="Delete">✕</button>`:""}</td>
       </tr>`).join("")}
     </table></div>
     <div class="actions" style="margin-top:10px">
-      <input id="np-name" placeholder="Nom du nouveau membre" style="max-width:200px">
-      <input id="np-login" placeholder="Login Windows" style="max-width:140px">
-      <button class="btn small" id="btn-add-person">Ajouter</button>
-      <button class="btn small ok" id="btn-save-people">💾 Enregistrer les modifications</button>
+      <input id="np-name" placeholder="New member's name" style="max-width:200px">
+      <input id="np-login" placeholder="Windows login" style="max-width:140px">
+      <button class="btn small" id="btn-add-person">Add</button>
+      <button class="btn small ok" id="btn-save-people">💾 Save changes</button>
     </div>
-    <p class="muted" style="margin-top:8px">Profils cumulables — sans case cochée, la personne a le profil
-    <b>standard</b> : poser/annuler ses propres demandes et voir le planning d'équipe. <b>Admin</b> ajoute la
-    validation des congés et la gestion des personnes/équipes/lieux ; <b>Chef de projet</b> ajoute le capacity
-    plan et l'onglet Projets. La <b>compétence</b> (texte libre, ex : Data engineering, Support, BA…) sert au
-    ciblage des projets et au filtre du capacity plan. Le login Windows permet la connexion automatique via
-    <b>Lancer.cmd</b> (casse ignorée).
-    Cible j. = jours travaillés attendus dans l'année (par défaut : interne ${CONTRACTS.interne.target}, externe ${CONTRACTS.externe.target}).
-    « Désactiver » (décocher Actif) masque la personne sans perdre son historique.</p>
+    <p class="muted" style="margin-top:8px">Cumulative profiles — with no box checked, a person has the
+    <b>standard</b> profile: submit/cancel their own requests and view the team schedule. <b>Admin</b> adds
+    leave approval and people/team/location management; <b>Project manager</b> adds the capacity
+    plan and the Projects tab. <b>Skill</b> (free text, e.g. Data engineering, Support, BA…) is used to
+    target projects and to filter the capacity plan. <b>End date</b> is the date a person leaves the team —
+    from that date their capacity contribution drops to zero (calendar, capacity plan, projects) without
+    needing to deactivate them; leave it blank if not applicable. Windows login enables automatic sign-in via
+    <b>Lancer.cmd</b> (case-insensitive).
+    Target d. = expected worked days for the year (default: internal ${CONTRACTS.interne.target}, external ${CONTRACTS.externe.target}).
+    "Deactivate" (uncheck Active) hides the person without losing their history.</p>
   </div>
 
   <div class="row">
     <div class="card">
-      <h2>🏢 Équipes</h2>
+      <h2>🏢 Teams</h2>
       <table>
-        <tr><th>Nom</th><th>Trigramme</th><th></th><th></th></tr>
+        <tr><th>Name</th><th>Trigram</th><th></th><th></th></tr>
         ${config.teams.map(t=>{
           const n = activePeople().filter(p=>p.teamId===t.id).length;
           return `<tr><td><input data-tname="${t.id}" value="${esc(t.name)}"></td>
             <td><input data-ttrigram="${t.id}" value="${esc(t.trigram||"")}" maxlength="4" style="width:70px; text-transform:uppercase"></td>
-            <td class="muted">${n} membre(s)</td>
+            <td class="muted">${n} member(s)</td>
             <td>${config.teams.length>1 && n===0 ? `<button class="btn small danger" data-tdel="${t.id}">✕</button>`:""}</td></tr>`;
         }).join("")}
       </table>
       <div class="actions" style="margin-top:10px">
-        <input id="nt-name" placeholder="Nouvelle équipe" style="max-width:200px">
-        <input id="nt-trigram" placeholder="Trigramme" style="max-width:90px; text-transform:uppercase">
-        <button class="btn small" id="btn-add-team">Ajouter</button>
-        <button class="btn small ok" id="btn-save-teams">💾 Enregistrer</button>
+        <input id="nt-name" placeholder="New team" style="max-width:200px">
+        <input id="nt-trigram" placeholder="Trigram" style="max-width:90px; text-transform:uppercase">
+        <button class="btn small" id="btn-add-team">Add</button>
+        <button class="btn small ok" id="btn-save-teams">💾 Save</button>
       </div>
-      <p class="muted" style="margin-top:8px">Le trigramme précède le prénom partout où les personnes sont listées
-      (ex : « ${esc(config.teams[0]?.trigram||"ABC")}-${esc((activePeople().find(p=>p.teamId===config.teams[0]?.id)||{name:"Prénom"}).name)} »).
-      Une équipe ne peut être supprimée que si elle n'a plus de membre actif.</p>
+      <p class="muted" style="margin-top:8px">The trigram is shown before each person's first name wherever
+      people are listed
+      (e.g. "${esc(config.teams[0]?.trigram||"ABC")}-${esc((activePeople().find(p=>p.teamId===config.teams[0]?.id)||{name:"FirstName"}).name)}").
+      A team can only be deleted once it has no active members left.</p>
     </div>
 
     <div class="card">
-      <h2>🌍 Lieux & jours fériés</h2>
+      <h2>🌍 Locations &amp; public holidays</h2>
       <div class="actions" style="margin-bottom:10px">
         <select id="loc-select" style="max-width:220px">${locOptions(settingsLoc)}</select>
         <span class="muted">${config.locations.map(l=>esc(l.name)).join(" · ")}</span>
       </div>
       <div class="actions" style="margin-bottom:10px">
         <input id="loc-year" type="number" value="${y+1}" style="max-width:100px">
-        <button class="btn small" id="btn-gen-holidays" ${loc.gen && loc.gen!=="NONE"?"":"disabled"}>Générer fériés ${esc(gen.label)}</button>
+        <button class="btn small" id="btn-gen-holidays" ${loc.gen && loc.gen!=="NONE"?"":"disabled"}>Generate ${esc(gen.label)} holidays</button>
       </div>
       ${gen.note?`<div class="notice">${esc(gen.note)}</div>`:""}
       <div class="actions" style="margin-bottom:10px">
         <input id="hol-date" type="date" style="max-width:160px">
-        <input id="hol-label" placeholder="Libellé (ex : pont, Aïd…)" style="max-width:180px">
-        <button class="btn small" id="btn-add-holiday">Ajouter</button>
+        <input id="hol-label" placeholder="Label (e.g. bridge day, Eid…)" style="max-width:180px">
+        <button class="btn small" id="btn-add-holiday">Add</button>
       </div>
       <div style="max-height:280px; overflow:auto"><table>
-        <tr><th>Date</th><th>Libellé</th><th></th></tr>
-        ${hols.map(h=>`<tr><td>${fmtFr(h.date)}</td><td>${esc(h.label)}</td>
+        <tr><th>Date</th><th>Label</th><th></th></tr>
+        ${hols.map(h=>`<tr><td>${fmtDate(h.date)}</td><td>${esc(h.label)}</td>
           <td><button class="btn small danger" data-hdel="${h.date}">✕</button></td></tr>`).join("")}
       </table></div>
-      <h2 style="margin-top:14px">Ajouter un lieu</h2>
+      <h2 style="margin-top:14px">Add a location</h2>
       <div class="actions">
-        <input id="nl-name" placeholder="Nom (ex : Luxembourg)" style="max-width:160px">
+        <input id="nl-name" placeholder="Name (e.g. Luxembourg)" style="max-width:160px">
         <select id="nl-gen" style="max-width:230px">${Object.entries(HOLGENS).map(([k,g])=>`<option value="${k}">${g.label}</option>`).join("")}</select>
-        <button class="btn small" id="btn-add-loc">Créer</button>
+        <button class="btn small" id="btn-add-loc">Create</button>
       </div>
-      <p class="muted" style="margin-top:8px">Créer un lieu génère ses fériés pour ${y} et ${y+1}. Les lieux inutilisés peuvent être recréés sans risque.</p>
+      <p class="muted" style="margin-top:8px">Creating a location generates its public holidays for ${y} and ${y+1}. Unused locations can be safely recreated.</p>
     </div>
   </div>
 
   <div class="card">
-    <h2>💾 Données & lancement</h2>
-    <p class="muted">Mode : <b>${store.mode==="fs"?`dossier partagé « ${esc(store.dir.name)} »`:"démo (localStorage)"}</b>.
-    Chaque demande est un fichier JSON individuel dans <code>requests/</code>, la configuration est dans <code>config.json</code>.
-    Pour la connexion automatique, chaque personne doit lancer l'application via <b>Lancer.cmd</b>
-    (fourni à côté de index.html), qui transmet le login Windows.
-    Pensez à faire une copie de sauvegarde du dossier de temps en temps.</p>
+    <h2>💾 Data &amp; launch</h2>
+    <p class="muted">Mode: <b>${store.mode==="fs"?`shared folder “${esc(store.dir.name)}”`:"demo (localStorage)"}</b>.
+    Each request is an individual JSON file in <code>requests/</code>, the configuration lives in <code>config.json</code>.
+    For automatic sign-in, each person should launch the app via <b>Lancer.cmd</b>
+    (provided alongside index.html), which passes along the Windows login.
+    Remember to back up the data folder from time to time.</p>
     <div class="actions" style="margin-top:8px">
-      <button class="btn small secondary" id="btn-change-folder">Changer de dossier de données</button>
+      <button class="btn small secondary" id="btn-change-folder">Change data folder</button>
     </div>
   </div>`;
 }
 
 /* ---------- CSV ---------- */
 function exportCsv(){
-  const head = "Personne;Equipe;Lieu;Contrat;Type;Debut;Fin;Demi-journee;Jours ouvres;Statut;Commentaire;Cree le;Decide par\n";
+  const head = "Person;Team;Location;Contract;Type;Start;End;HalfDay;BusinessDays;Status;Comment;CreatedOn;DecidedBy\n";
   const lines = [...requests].sort((a,b)=>a.start.localeCompare(b.start)).map(r=>{
     const p = personById(r.personId);
     return [
@@ -1638,7 +1676,7 @@ function exportCsv(){
   a.click(); URL.revokeObjectURL(a.href);
 }
 
-/* ---------- Liaisons post-rendu ---------- */
+/* ---------- Post-render bindings ---------- */
 function bindForm(prefix, withPerson){
   const submit = document.getElementById(prefix+"-submit");
   if(!submit) return;
@@ -1649,7 +1687,7 @@ function bindForm(prefix, withPerson){
     if(s && (!e || e<s)) document.getElementById(prefix+"-end").value = s;
     const e2=document.getElementById(prefix+"-end").value;
     document.getElementById(prefix+"-days").textContent =
-      (s && e2 && e2>=s) ? openDaysP(s,e2,h,who())+" jour(s) ouvré(s)" : "";
+      (s && e2 && e2>=s) ? openDaysP(s,e2,h,who())+" business day(s)" : "";
   };
   ["start","end","half"].forEach(f=>document.getElementById(prefix+"-"+f).onchange=upd);
   if(withPerson) document.getElementById(prefix+"-person").onchange=upd;
@@ -1669,10 +1707,11 @@ function bindAfterRender(){
   const q = id=>document.getElementById(id);
   bindForm("nf", isAdmin());
   bindForm("af", true);
+  document.querySelectorAll("[data-teamtoggle]").forEach(b=>b.onclick=()=>{ toggleTeam(b.dataset.teamtoggle); render(); });
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.del));
   document.querySelectorAll("[data-approve]").forEach(b=>b.onclick=()=>decide(b.dataset.approve,"approved"));
   document.querySelectorAll("[data-reject]").forEach(b=>b.onclick=()=>{
-    const c = prompt("Motif du refus (facultatif) :")||"";
+    const c = prompt("Reason for rejection (optional):")||"";
     decide(b.dataset.reject,"rejected",c);
   });
   if(q("cal-prev")) q("cal-prev").onclick = ()=>{ calMonth--; if(calMonth<0){calMonth=11;calYear--;} render(); };
@@ -1685,7 +1724,7 @@ function bindAfterRender(){
   if(q("capa-skill")) q("capa-skill").onchange = e=>{ capSkill=e.target.value; render(); };
   if(q("capa-smooth")) q("capa-smooth").onchange = e=>{ capSmooth=e.target.checked; render(); };
 
-  /* Projets (chef de projet) */
+  /* Projects (project manager) */
   if(q("proj-new-team")) q("proj-new-team").onchange = e=>{
     const dl = q("proj-skill-dl");
     if(dl) dl.innerHTML = teamSkills(e.target.value).map(s=>`<option value="${esc(s)}">`).join("");
@@ -1700,24 +1739,24 @@ function bindAfterRender(){
                createdBy:currentUser.id, createdAt:new Date().toISOString()};
     await store.saveProject(p);
     projects.push(p); projSel = p.id;
-    toast("Projet créé ✓ — ajoutez d'autres cibles, les personnes affectées et la charge restante"); render();
+    toast("Project created ✓ — add more targets, allocate people and set the remaining workload"); render();
   };
   document.querySelectorAll("[data-popen]").forEach(b=>b.onclick=()=>{ projSel=b.dataset.popen; render(); });
   document.querySelectorAll("[data-pdel-proj]").forEach(b=>b.onclick=async ()=>{
     if(!isCdp()) return;
     const p = projects.find(x=>x.id===b.dataset.pdelProj);
-    if(!confirm(`Supprimer le projet « ${p.name} » et ses affectations ?`)) return;
+    if(!confirm(`Delete project "${p.name}" and its allocations?`)) return;
     await store.deleteProject(p.id);
     projects = projects.filter(x=>x.id!==p.id);
     if(projSel===p.id) projSel=null;
-    toast("Projet supprimé"); render();
+    toast("Project deleted"); render();
   });
   document.querySelectorAll("[data-pract]").forEach(cb=>cb.onchange=async ()=>{
     if(!isCdp()) return;
     const p = projects.find(x=>x.id===cb.dataset.pract);
     p.active = cb.checked;
     await store.saveProject(p);
-    toast(p.active?"Projet réactivé — affectations décomptées":"Projet suspendu — affectations ignorées");
+    toast(p.active?"Project reactivated — allocations counted again":"Project suspended — allocations ignored");
     render();
   });
   if(q("proj-prev")) q("proj-prev").onclick = ()=>{ projYear--; render(); };
@@ -1746,7 +1785,7 @@ function bindAfterRender(){
       if(v>0) pr.allocations[pid][key] = v; else delete pr.allocations[pid][key];
     });
     await store.saveProject(pr);
-    toast("Affectations enregistrées ✓"); render();
+    toast("Allocations saved ✓"); render();
   };
   if(q("btn-bulk-alloc")) q("btn-bulk-alloc").onclick = async ()=>{
     if(!isCdp()) return;
@@ -1754,9 +1793,9 @@ function bindAfterRender(){
     const target = (pr.targets||[])[parseInt(q("bulk-target").value)]; if(!target) return;
     const startM = parseInt(q("bulk-start-m").value), endM = parseInt(q("bulk-end-m").value);
     const pct = Math.max(0, Math.min(100, parseInt(q("bulk-pct").value)||0));
-    if(endM<startM) return alert("Le mois de fin doit être après le mois de début.");
+    if(endM<startM) return alert("The end month must be after the start month.");
     const members = activePeople().filter(p=>p.teamId===target.teamId && (!target.skill || (p.skill||"").trim()===target.skill));
-    if(!members.length) return alert("Aucune personne active ne correspond à cette cible.");
+    if(!members.length) return alert("No active person matches this target.");
     pr.allocations = pr.allocations||{};
     for(const p of members){
       pr.allocations[p.id] = pr.allocations[p.id]||{};
@@ -1766,7 +1805,7 @@ function bindAfterRender(){
       }
     }
     await store.saveProject(pr);
-    toast(`${members.length} personne(s) affectée(s) à ${pct} % ✓`); render();
+    toast(`${members.length} person/people allocated at ${pct}% ✓`); render();
   };
   if(q("btn-add-target")) q("btn-add-target").onclick = async ()=>{
     if(!isCdp()) return;
@@ -1774,7 +1813,7 @@ function bindAfterRender(){
     pr.targets = pr.targets||[];
     pr.targets.push({teamId:q("tgt-new-team").value, skill:q("tgt-new-skill").value.trim()});
     await store.saveProject(pr);
-    toast("Cible ajoutée ✓"); render();
+    toast("Target added ✓"); render();
   };
   document.querySelectorAll("[data-tgtdel]").forEach(b=>b.onclick=async ()=>{
     if(!isCdp()) return;
@@ -1788,11 +1827,11 @@ function bindAfterRender(){
     const skill = q("wl-skill").value.trim();
     const days = Math.max(0, parseFloat(q("wl-days").value)||0);
     const due = q("wl-due").value;
-    if(!due) return alert("Choisissez une date de fin souhaitée.");
+    if(!due) return alert("Choose a desired due date.");
     pr.workloads = pr.workloads||[];
     pr.workloads.push({skill, remainingDays:days, dueDate:due});
     await store.saveProject(pr);
-    toast("Ligne de charge ajoutée ✓"); render();
+    toast("Workload line added ✓"); render();
   };
   if(q("btn-save-workloads")) q("btn-save-workloads").onclick = async ()=>{
     if(!isCdp()) return;
@@ -1806,7 +1845,7 @@ function bindAfterRender(){
       if(pr.workloads[i] && inp.value) pr.workloads[i].dueDate = inp.value;
     });
     await store.saveProject(pr);
-    toast("Charges enregistrées ✓"); render();
+    toast("Workloads saved ✓"); render();
   };
   document.querySelectorAll("[data-wldel]").forEach(b=>b.onclick=async ()=>{
     if(!isCdp()) return;
@@ -1817,7 +1856,7 @@ function bindAfterRender(){
   if(q("team-filter")) q("team-filter").onchange = e=>{ teamViewFilter=e.target.value; render(); };
   if(q("btn-export-csv")) q("btn-export-csv").onclick = exportCsv;
   if(q("btn-change-folder")) q("btn-change-folder").onclick = async ()=>{
-    if(!window.showDirectoryPicker) return alert("Indisponible dans ce navigateur.");
+    if(!window.showDirectoryPicker) return alert("Not available in this browser.");
     try{
       const h = await window.showDirectoryPicker({mode:"readwrite"});
       await store.connectFolder(h);
@@ -1827,16 +1866,17 @@ function bindAfterRender(){
     }catch(e){}
   };
 
-  /* Paramètres : personnes */
+  /* Settings: people */
   if(q("btn-add-person")) q("btn-add-person").onclick = async ()=>{
     const name = q("np-name").value.trim();
     if(!name) return;
     config.people.push({id:uid(), name, winLogin:q("np-login").value.trim(), roles:[],
       teamId:config.teams[0].id, locationId:config.locations[0].id,
-      contract:"interne", target:CONTRACTS.interne.target, cp:CONTRACTS.interne.cp, rtt:CONTRACTS.interne.rtt, active:true});
-    await store.saveConfig(config); toast("Membre ajouté ✓ — ajustez son équipe/lieu/contrat puis Enregistrer"); render();
+      contract:"interne", target:CONTRACTS.interne.target, cp:CONTRACTS.interne.cp, rtt:CONTRACTS.interne.rtt,
+      endDate:"", active:true});
+    await store.saveConfig(config); toast("Member added ✓ — adjust their team/location/contract then Save"); render();
   };
-  // changer le contrat pré-remplit la cible et les droits CP/RTT s'ils valaient l'autre défaut
+  // switching contract type pre-fills the target and CP/RTT if they were at the other default
   document.querySelectorAll("[data-pcontract]").forEach(sel=>sel.onchange=()=>{
     const id = sel.dataset.pcontract;
     const tgt = document.querySelector(`[data-ptarget="${id}"]`);
@@ -1866,33 +1906,34 @@ function bindAfterRender(){
       if(g("pcp")) p.cp = parseFloat(g("pcp").value)||0;
       if(g("prtt")) p.rtt = parseFloat(g("prtt").value)||0;
       if(g("ptarget")) p.target = parseInt(g("ptarget").value)||CONTRACTS[p.contract].target;
+      if(g("pend")) p.endDate = g("pend").value||"";
       if(g("pactive")) p.active = g("pactive").checked;
     }
     if(!config.people.some(p=>(p.roles||[]).includes("admin") && p.active!==false))
-      return alert("Impossible : il doit rester au moins un administrateur actif.");
+      return alert("Not allowed: at least one active administrator must remain.");
     const logins = config.people.filter(p=>p.winLogin).map(p=>p.winLogin.toLowerCase());
     const dup = logins.find((l,i)=>logins.indexOf(l)!==i);
-    if(dup) return alert(`Le login Windows « ${dup} » est utilisé par deux personnes.`);
+    if(dup) return alert(`Windows login "${dup}" is used by two people.`);
     await store.saveConfig(config);
     currentUser = personById(currentUser.id);
-    toast("Modifications enregistrées ✓"); startApp();
+    toast("Changes saved ✓"); startApp();
   };
   document.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=async ()=>{
     const p = personById(b.dataset.pdel);
     if(requests.some(r=>r.personId===p.id))
-      return alert(`${p.name} a des demandes enregistrées : désactivez la personne (case « Actif ») plutôt que de la supprimer.`);
-    if(!confirm(`Supprimer ${p.name} ?`)) return;
+      return alert(`${p.name} has requests on record: deactivate them (uncheck Active) instead of deleting.`);
+    if(!confirm(`Delete ${p.name}?`)) return;
     config.people = config.people.filter(x=>x.id!==p.id);
-    await store.saveConfig(config); toast("Personne supprimée"); render();
+    await store.saveConfig(config); toast("Person deleted"); render();
   });
 
-  /* Paramètres : équipes */
+  /* Settings: teams */
   if(q("btn-add-team")) q("btn-add-team").onclick = async ()=>{
     const name = q("nt-name").value.trim();
     if(!name) return;
     const trigram = (q("nt-trigram").value.trim() || autoTrigram(name)).toUpperCase().slice(0,4);
     config.teams.push({id:"t-"+uid(), name, trigram});
-    await store.saveConfig(config); toast("Équipe ajoutée ✓"); render();
+    await store.saveConfig(config); toast("Team added ✓"); render();
   };
   if(q("btn-save-teams")) q("btn-save-teams").onclick = async ()=>{
     for(const t of config.teams){
@@ -1901,34 +1942,34 @@ function bindAfterRender(){
       const tel = document.querySelector(`[data-ttrigram="${t.id}"]`);
       if(tel && tel.value.trim()) t.trigram = tel.value.trim().toUpperCase().slice(0,4);
     }
-    await store.saveConfig(config); toast("Équipes enregistrées ✓"); render();
+    await store.saveConfig(config); toast("Teams saved ✓"); render();
   };
   document.querySelectorAll("[data-tdel]").forEach(b=>b.onclick=async ()=>{
     if(config.people.some(p=>p.teamId===b.dataset.tdel && p.active!==false))
-      return alert("Cette équipe a encore des membres actifs.");
-    if(!confirm("Supprimer cette équipe ?")) return;
+      return alert("This team still has active members.");
+    if(!confirm("Delete this team?")) return;
     config.teams = config.teams.filter(t=>t.id!==b.dataset.tdel);
     await store.saveConfig(config); render();
   });
 
-  /* Paramètres : lieux & fériés */
+  /* Settings: locations & public holidays */
   if(q("loc-select")) q("loc-select").onchange = e=>{ settingsLoc=e.target.value; render(); };
   if(q("btn-gen-holidays")) q("btn-gen-holidays").onclick = async ()=>{
     const y = parseInt(q("loc-year").value);
-    if(!y || y<2000 || y>2100) return alert("Année invalide.");
+    if(!y || y<2000 || y>2100) return alert("Invalid year.");
     const loc = locById(settingsLoc);
     const gen = HOLGENS[loc.gen||"NONE"];
     const existing = new Set(config.holidays.filter(h=>h.locationId===settingsLoc).map(h=>h.date));
     let added=0;
     for(const h of gen.gen(y)) if(!existing.has(h.date)){ config.holidays.push({...h, locationId:settingsLoc}); added++; }
-    await store.saveConfig(config); toast(added+" férié(s) ajouté(s) pour "+loc.name); render();
+    await store.saveConfig(config); toast(added+" holiday(s) added for "+loc.name); render();
   };
   if(q("btn-add-holiday")) q("btn-add-holiday").onclick = async ()=>{
-    const d = q("hol-date").value, l = q("hol-label").value.trim()||"Férié";
+    const d = q("hol-date").value, l = q("hol-label").value.trim()||"Public holiday";
     if(!d) return;
-    if(config.holidays.some(h=>h.date===d && h.locationId===settingsLoc)) return alert("Cette date est déjà fériée pour ce lieu.");
+    if(config.holidays.some(h=>h.date===d && h.locationId===settingsLoc)) return alert("This date is already a public holiday for this location.");
     config.holidays.push({date:d, label:l, locationId:settingsLoc});
-    await store.saveConfig(config); toast("Jour ajouté ✓"); render();
+    await store.saveConfig(config); toast("Day added ✓"); render();
   };
   document.querySelectorAll("[data-hdel]").forEach(b=>b.onclick=async ()=>{
     config.holidays = config.holidays.filter(h=>!(h.date===b.dataset.hdel && h.locationId===settingsLoc));
@@ -1944,7 +1985,7 @@ function bindAfterRender(){
     for(const h of [...HOLGENS[genKey].gen(y), ...HOLGENS[genKey].gen(y+1)])
       config.holidays.push({...h, locationId:id});
     settingsLoc = id;
-    await store.saveConfig(config); toast("Lieu créé avec ses fériés ✓"); render();
+    await store.saveConfig(config); toast("Location created with its public holidays ✓"); render();
   };
 }
 

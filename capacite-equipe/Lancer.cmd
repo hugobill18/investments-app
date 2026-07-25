@@ -1,10 +1,10 @@
 @echo off
-rem Lance l'application Capacite Equipe en transmettant le login Windows
-rem pour la connexion automatique. A garder dans le meme dossier que index.html.
+rem Launches the Team Capacity app, passing along the Windows login for
+rem automatic sign-in. Keep this file in the same folder as index.html.
 setlocal
 set "P=%~dp0index.html"
 set "P=%P:\=/%"
 set "URL=file:///%P%?login=%USERNAME%"
-rem Edge est present sur tous les Windows 10/11 ; sinon navigateur par defaut.
+rem Edge ships on every Windows 10/11 PC; fall back to the default browser.
 start "" msedge "%URL%" || start "" "%URL%"
 endlocal
