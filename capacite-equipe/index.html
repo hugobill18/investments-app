@@ -796,6 +796,46 @@ function requestNeedsApproval(type, person, startIso, endIso){
   }
   return false;
 }
+/* Pure builder, no prompts — shared by the interactive single submission
+   and the silent batch creation used for a weekly remote-work recurrence. */
+function buildRequest(personId, type, start, end, half, comment, recurrenceId){
+  const person = personById(personId);
+  const auto = !requestNeedsApproval(type,person,start,end) || isAdmin();
+  return {
+    id:uid(), personId, type, start, end, half:(start===end? half||null : null),
+    comment:comment||"", status: auto?"approved":"pending",
+    createdBy: currentUser.id, createdAt: new Date().toISOString(),
+    decidedBy: auto?currentUser.id:null, decidedAt: auto?new Date().toISOString():null, decisionComment:"",
+    recurrenceId: recurrenceId||null,
+  };
+}
+/* When a genuine absence (paid leave, RTT, sick, training…) is booked over
+   days that already had remote work recorded, that remote work no longer
+   makes sense: cancel it and credit the days back automatically (the
+   remote-quota balance is derived live from approved TT requests, so
+   deleting/shrinking them is all "crediting back" requires). Overlapping
+   remote requests are trimmed to their non-overlapping remainder rather
+   than deleted outright when only part of their range is covered. */
+async function reclaimRemoteDays(personId, startIso, endIso){
+  const person = personById(personId);
+  const affected = requests.filter(r=>r.personId===personId && r.type==="TT" && r.status!=="rejected" &&
+      r.start<=endIso && r.end>=startIso);
+  let reclaimed = 0;
+  for(const r of affected){
+    reclaimed += openDaysInRange(r, startIso, endIso, person);
+    const pieces = [];
+    if(r.start<startIso) pieces.push({start:r.start, end:iso(addDays(fromIso(startIso),-1))});
+    if(r.end>endIso) pieces.push({start:iso(addDays(fromIso(endIso),1)), end:r.end});
+    await store.deleteRequest(r.id);
+    requests = requests.filter(x=>x.id!==r.id);
+    for(const p of pieces){
+      const np = {...r, id:uid(), start:p.start, end:p.end, half:null};
+      await store.saveRequest(np);
+      requests.push(np);
+    }
+  }
+  return reclaimed;
+}
 async function createRequest({personId,type,start,end,half,comment}){
   if(personId!==currentUser.id && !isAdmin()) return alert("Only an administrator can submit a request for someone else.");
   if(!TYPES[type]) return alert("Unknown type.");
@@ -807,16 +847,55 @@ async function createRequest({personId,type,start,end,half,comment}){
       r.start<=end && r.end>=start && (TYPES[r.type].absent===TYPES[type].absent));
   if(clash && !confirm(`Warning: overlaps with "${TYPES[clash.type].label} from ${fmtDate(clash.start)} to ${fmtDate(clash.end)}" (${STATUS[clash.status]}). Continue anyway?`)) return;
 
-  const auto = !requestNeedsApproval(type,person,start,end) || isAdmin();
-  const r = {
-    id:uid(), personId, type, start, end, half:(start===end? half||null : null),
-    comment:comment||"", status: auto?"approved":"pending",
-    createdBy: currentUser.id, createdAt: new Date().toISOString(),
-    decidedBy: auto?currentUser.id:null, decidedAt: auto?new Date().toISOString():null, decisionComment:"",
-  };
+  const r = buildRequest(personId,type,start,end,half,comment,null);
   await store.saveRequest(r);
   requests = requests.filter(x=>x.id!==r.id).concat(r);
-  toast(auto? "Saved and approved ✓" : "Request submitted — awaiting approval");
+  let extra = "";
+  if(TYPES[type].absent){
+    const reclaimed = await reclaimRemoteDays(personId, start, end);
+    if(reclaimed>0) extra = ` — ${fmtDays(reclaimed)} remote day(s) cancelled and credited back`;
+  }
+  toast((r.status==="approved"? "Saved and approved ✓" : "Request submitted — awaiting approval")+extra);
+  render();
+}
+/* Weekly remote-work recurrence: creates one single-day TT request per
+   matching weekday in the range, silently skipping non-working days and
+   days already covered by another request (no per-day prompts). */
+async function createRecurringRemote({personId, start, end, weekdays, comment}){
+  if(personId!==currentUser.id && !isAdmin()) return alert("Only an administrator can submit a request for someone else.");
+  if(!start || !end || end<start) return alert("Invalid dates.");
+  if(!weekdays.length) return alert("Select at least one weekday to repeat on.");
+  const person = personById(personId);
+  const recId = uid();
+  let created=0, skipped=0;
+  for(let d=fromIso(start); iso(d)<=end; d=addDays(d,1)){
+    if(!weekdays.includes(d.getDay())) continue;
+    const dIso = iso(d);
+    if(openDaysP(dIso,dIso,null,person)===0){ skipped++; continue; }
+    const already = requests.find(r=>r.personId===personId && r.status!=="rejected" && r.start<=dIso && r.end>=dIso);
+    if(already){ skipped++; continue; }
+    const r = buildRequest(personId,"TT",dIso,dIso,null,comment,recId);
+    await store.saveRequest(r);
+    requests.push(r);
+    created++;
+  }
+  if(created===0) return toast("No day created — every matching date was a weekend/holiday or already booked.");
+  toast(`${created} remote day(s) created${skipped?`, ${skipped} skipped (non-working day or already booked)`:""}`);
+  render();
+}
+/* Bulk-cancel a weekly remote-work recurrence, applying the same
+   per-item permission rule as a single cancellation (admins: anything;
+   others: only their own still-pending days). */
+async function removeRecurrence(recurrenceId){
+  const items = requests.filter(r=>r.recurrenceId===recurrenceId);
+  if(!items.length) return;
+  const eligible = items.filter(r=> isAdmin() || (r.personId===currentUser.id && r.status==="pending"));
+  if(!eligible.length) return alert("None of these days can be cancelled by you (only your own still-pending days can be cancelled).");
+  if(!confirm(`Cancel ${eligible.length} of ${items.length} day(s) in this recurring remote-work series?`)) return;
+  for(const r of eligible){ await store.deleteRequest(r.id); }
+  const removedIds = new Set(eligible.map(r=>r.id));
+  requests = requests.filter(r=>!removedIds.has(r.id));
+  toast(`${eligible.length} day(s) cancelled`);
   render();
 }
 async function decide(id, status, comment){
@@ -945,6 +1024,15 @@ function requestForm(idPrefix, withPerson){
       <div><label>Half day (if 1 day)</label>
         <select id="${idPrefix}-half"><option value="">Full day</option><option value="AM">Morning</option><option value="PM">Afternoon</option></select></div>
     </div>
+    <div id="${idPrefix}-recur-wrap" class="hidden">
+      <label style="display:inline; margin-top:10px"><input type="checkbox" id="${idPrefix}-recur"> Weekly recurrence</label>
+      <div id="${idPrefix}-recur-days" class="actions hidden" style="margin-top:6px">
+        <span class="muted">Repeat on:</span>
+        ${["Mon","Tue","Wed","Thu","Fri"].map((lbl,i)=>`<label style="display:inline; margin:0">
+          <input type="checkbox" id="${idPrefix}-rd-${i+1}" ${i===0?"checked":""}> ${lbl}</label>`).join("")}
+        <span class="muted">between the From/To dates above</span>
+      </div>
+    </div>
     <label>Comment (optional)</label>
     <input id="${idPrefix}-comment" placeholder="e.g. summer holiday">
     <div style="margin-top:12px" class="actions">
@@ -952,15 +1040,24 @@ function requestForm(idPrefix, withPerson){
       <span class="muted" id="${idPrefix}-days"></span>
     </div>`;
 }
-function requestRow(r, showPerson){
+function requestRow(r, showPerson, allRows){
   const t = TYPES[r.type];
   const p = personById(r.personId);
   const days = p? openDaysP(r.start,r.end,r.half,p) : 0;
   const own = r.personId===currentUser.id;
   const canCancel = isAdmin() || (own && r.status==="pending");
+  let recurTag = "";
+  if(r.recurrenceId && allRows){
+    const siblings = allRows.filter(x=>x.recurrenceId===r.recurrenceId);
+    const isFirst = siblings[0]===r || siblings.findIndex(x=>x.id===r.id)===0;
+    recurTag = ` <span class="muted" title="Part of a weekly remote-work recurrence">🔁</span>`;
+    if(isFirst && siblings.length>1){
+      recurTag += `<div><button class="btn small secondary" data-recur-cancel="${r.recurrenceId}" style="margin-top:2px">Cancel all ${siblings.length} day(s)</button></div>`;
+    }
+  }
   return `<tr>
     ${showPerson?`<td>${esc(p?.name||"?")}</td>`:""}
-    <td><span class="pill" style="background:${t.hex}">${t.label}</span></td>
+    <td><span class="pill" style="background:${t.hex}">${t.label}</span>${recurTag}</td>
     <td>${fmtDate(r.start)}${r.start!==r.end?" → "+fmtDate(r.end):""}${r.half?` (${r.half==="AM"?"morning":"afternoon"})`:""}</td>
     <td>${days} d</td>
     <td><span class="pill st-${r.status}">${STATUS[r.status]}</span>
@@ -1015,7 +1112,7 @@ function viewMe(){
       <h2>📋 My requests &amp; absences</h2>
       ${mine.length? `<div style="overflow-x:auto"><table>
         <tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Comment</th><th></th></tr>
-        ${mine.map(r=>requestRow(r,false)).join("")}</table></div>`
+        ${mine.map(r=>requestRow(r,false,mine)).join("")}</table></div>`
         : `<p class="muted">No requests yet.</p>`}
     </div>
   </div>`;
@@ -1777,21 +1874,50 @@ function bindForm(prefix, withPerson){
   const submit = document.getElementById(prefix+"-submit");
   if(!submit) return;
   const who = ()=> withPerson ? personById(document.getElementById(prefix+"-person").value) : currentUser;
+  const typeEl = document.getElementById(prefix+"-type");
+  const recurWrap = document.getElementById(prefix+"-recur-wrap");
+  const recurChk = document.getElementById(prefix+"-recur");
+  const recurDays = document.getElementById(prefix+"-recur-days");
+  const syncRecurVisibility = ()=>{
+    const isTT = typeEl.value==="TT";
+    recurWrap.classList.toggle("hidden", !isTT);
+    if(!isTT) recurChk.checked = false;
+    recurDays.classList.toggle("hidden", !recurChk.checked);
+  };
   const upd = ()=>{
     const s=document.getElementById(prefix+"-start").value, e=document.getElementById(prefix+"-end").value;
     const h=document.getElementById(prefix+"-half").value||null;
     if(s && (!e || e<s)) document.getElementById(prefix+"-end").value = s;
     const e2=document.getElementById(prefix+"-end").value;
-    document.getElementById(prefix+"-days").textContent =
-      (s && e2 && e2>=s) ? openDaysP(s,e2,h,who())+" business day(s)" : "";
+    if(recurChk.checked){
+      document.getElementById(prefix+"-days").textContent = "";
+    }else{
+      document.getElementById(prefix+"-days").textContent =
+        (s && e2 && e2>=s) ? openDaysP(s,e2,h,who())+" business day(s)" : "";
+    }
   };
   ["start","end","half"].forEach(f=>document.getElementById(prefix+"-"+f).onchange=upd);
   if(withPerson) document.getElementById(prefix+"-person").onchange=upd;
+  typeEl.onchange = ()=>{ syncRecurVisibility(); upd(); };
+  recurChk.onchange = ()=>{ recurDays.classList.toggle("hidden", !recurChk.checked); upd(); };
+  syncRecurVisibility();
   upd();
   submit.onclick = ()=>{
+    const type = typeEl.value;
+    if(type==="TT" && recurChk.checked){
+      const weekdays = [1,2,3,4,5].filter(d=>document.getElementById(prefix+"-rd-"+d).checked);
+      createRecurringRemote({
+        personId: who().id,
+        start: document.getElementById(prefix+"-start").value,
+        end: document.getElementById(prefix+"-end").value,
+        weekdays,
+        comment: document.getElementById(prefix+"-comment").value,
+      });
+      return;
+    }
     createRequest({
       personId: who().id,
-      type: document.getElementById(prefix+"-type").value,
+      type,
       start: document.getElementById(prefix+"-start").value,
       end: document.getElementById(prefix+"-end").value,
       half: document.getElementById(prefix+"-half").value||null,
@@ -1805,6 +1931,7 @@ function bindAfterRender(){
   bindForm("af", true);
   document.querySelectorAll("[data-teamtoggle]").forEach(b=>b.onclick=()=>{ toggleTeam(b.dataset.teamtoggle); render(); });
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.del));
+  document.querySelectorAll("[data-recur-cancel]").forEach(b=>b.onclick=()=>removeRecurrence(b.dataset.recurCancel));
   document.querySelectorAll("[data-approve]").forEach(b=>b.onclick=()=>decide(b.dataset.approve,"approved"));
   document.querySelectorAll("[data-reject]").forEach(b=>b.onclick=()=>{
     const c = prompt("Reason for rejection (optional):")||"";

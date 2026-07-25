@@ -246,6 +246,41 @@ politique de télétravail, réglable par un administrateur :
 Le compteur restant s'affiche dans **Mon espace** et **Teams & balances**
 à côté des soldes CP/RTT (« Remote days left » / « — » si non suivi).
 
+### Récurrence hebdomadaire de télétravail
+
+Quand le type sélectionné est **Remote work**, une case **« Weekly
+recurrence »** apparaît sous le formulaire de demande (Mon espace, ou
+Équipes & soldes pour un admin saisissant pour un tiers). En la cochant,
+on choisit un ou plusieurs jours de la semaine (lundi à vendredi) : les
+dates « From » / « To » du formulaire deviennent alors la **période de la
+récurrence**, et une demande de télétravail d'un jour est créée
+automatiquement pour chaque occurrence du/des jour(s) choisi(s) dans cette
+période (les week-ends, jours fériés du lieu de la personne, et les jours
+déjà couverts par une autre demande sont silencieusement ignorés — un
+message récapitule le nombre de jours créés/ignorés).
+
+Chaque demande de télétravail issue d'une récurrence est marquée d'un 🔁
+dans « Mes demandes & absences » ; un bouton **« Cancel all N day(s) »**
+apparaît sur la première ligne du lot pour annuler toute la série en un
+clic (respecte les mêmes règles que l'annulation individuelle : un admin
+peut tout annuler, un membre standard uniquement les jours encore « En
+attente » des siens).
+
+**Annulation et recrédit automatiques.** Quand une vraie absence est
+posée — congé payé, RTT, arrêt maladie, absence imprévue, congé sans
+solde ou formation — sur une période qui recoupe des jours déjà réservés
+en télétravail (issus d'une récurrence ou saisis manuellement), ces
+jours de télétravail sont **automatiquement annulés** (ou raccourcis
+s'ils ne se recoupent que partiellement) et donc **recrédités** dans le
+quota de télétravail de la personne — puisque ce quota se calcule en
+temps réel à partir des jours de télétravail encore existants, il n'y a
+rien de plus à faire. Un message de confirmation le précise (« X remote
+day(s) cancelled and credited back »). Limite à connaître : ce recrédit a
+lieu **au moment de la saisie** de l'absence, pas au moment de sa
+validation — si une demande de congé qui a ainsi annulé du télétravail est
+ensuite **refusée**, le télétravail n'est pas restauré automatiquement (à
+re-saisir manuellement si besoin).
+
 ### Jour de présence obligatoire par équipe (On-site day)
 
 Chaque **équipe** (Settings → Teams, colonne **On-site day**) peut avoir un
