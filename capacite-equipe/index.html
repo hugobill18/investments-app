@@ -68,6 +68,7 @@
   table.cal tr.caprow td{background:#f3f4f6; font-weight:700;}
   .legend{display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--muted);}
   .legend .sw{display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:4px;}
+  .pend-note{color:#b45309; font-size:10px; line-height:1.2; white-space:nowrap;}
   .overlay{position:fixed; inset:0; background:rgba(17,24,39,.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px;}
   .overlay .box{background:#fff; border-radius:10px; padding:28px; max-width:540px; width:100%; max-height:92vh; overflow:auto;}
   .overlay .box h2{margin-bottom:8px; font-size:18px;}
@@ -301,15 +302,16 @@ const DEFAULT_ORG = [
     ["Ali","externe","Paris"], ["Soumaya","externe","Tunis"]]},
   {team:"Casa Datahub", members:[
     ["Saleh","externe","Paris"], ["Olivier","externe","Paris"], ["Béraud","externe","Paris"],
-    ["Sarra","externe","Paris"], ["Samuel","externe","Paris"]]},
+    ["Sarra","externe","Paris"], ["Samuel","externe","Paris",["cdp"]]]},
   {team:"3MS & Pricing project", members:[
     ["Saloua","externe","Paris"], ["Souha","externe","Paris"], ["Mustapha","externe","Paris"],
     ["Abibatou","externe","Paris"], ["Nabila","externe","Paris"],
     ["Marcin","interne","Kuala Lumpur"], ["Radha","externe","Kuala Lumpur"],
     ["Ghaith","externe","Lisbonne"]]},
   {team:"Transversal", members:[
-    ["Jerome","interne","Paris"], ["Walid","interne","Paris"], ["Youssef","interne","Paris"],
-    ["Firas","interne","Paris"], ["Jeremy","interne","Paris",["admin","cdp"]]]},
+    ["Jerome","interne","Paris",["admin","cdp"]], ["Walid","interne","Paris"],
+    ["Youssef","interne","Paris",["admin"]], ["Firas","interne","Paris",["cdp"]],
+    ["Gwendoline","interne","Paris",["cdp"]], ["Jeremy","interne","Paris",["admin","cdp"]]]},
 ];
 function buildDefaultConfig(){
   const y = new Date().getFullYear();
@@ -324,24 +326,26 @@ function buildDefaultConfig(){
     teams.push(t);
     for(const [name,contract,locName,roles] of def.members){
       people.push({id:uid()+Math.random().toString(36).slice(2,5), name, winLogin:"",
-        roles:roles||[], teamId:t.id, locationId:locByName[locName], contract,
+        roles:roles||[], skill:"", teamId:t.id, locationId:locByName[locName], contract,
         target:CONTRACTS[contract].target,
         cp:contract==="interne"?25:0, rtt:contract==="interne"?10:0, active:true});
     }
   });
-  return {version:3, teams, locations, people, holidays};
+  return {version:4, teams, locations, people, holidays};
 }
 
 /* ---------- État global ---------- */
 let config = null;
 let requests = [];
+let projects = [];
 let currentUser = null;
 let currentTab = "me";
 let calYear, calMonth, calTeam = "all", teamViewFilter = "all", settingsLoc = null;
-let capYear, capTeam = "all", capPending = false;
+let capYear, capTeam = "all", capSkill = "all";
+let projSel = null, projYear;
 const now = new Date();
 calYear = now.getFullYear(); calMonth = now.getMonth();
-capYear = now.getFullYear();
+capYear = now.getFullYear(); projYear = now.getFullYear();
 const DETECTED_LOGIN = (new URLSearchParams(location.search).get("login")||"").trim();
 
 const personById = id => (config?.people||[]).find(p=>p.id===id);
@@ -445,6 +449,36 @@ const store = {
     const rd = await this.requestsDir(true);
     try{ await rd.removeEntry(`req_${id}.json`); }catch(e){}
   },
+  /* projets : un fichier par projet (allocations incluses) */
+  async projectsDir(create){ return await this.dir.getDirectoryHandle("projects",{create:!!create}); },
+  async loadProjects(){
+    if(this.mode==="demo") return JSON.parse(localStorage.getItem("tc_projects")||"[]");
+    const out=[];
+    let pd; try{ pd = await this.projectsDir(false); }catch(e){ return out; }
+    for await (const [name,h] of pd.entries()){
+      if(h.kind==="file" && name.endsWith(".json")){
+        const p = await this.readJson(name, pd);
+        if(p && p.id) out.push(p);
+      }
+    }
+    return out;
+  },
+  async saveProject(p){
+    if(this.mode==="demo"){
+      const all = JSON.parse(localStorage.getItem("tc_projects")||"[]").filter(x=>x.id!==p.id);
+      all.push(p); localStorage.setItem("tc_projects",JSON.stringify(all)); return;
+    }
+    const pd = await this.projectsDir(true);
+    await this.writeJson(`proj_${p.id}.json`, p, pd);
+  },
+  async deleteProject(id){
+    if(this.mode==="demo"){
+      const all = JSON.parse(localStorage.getItem("tc_projects")||"[]").filter(x=>x.id!==id);
+      localStorage.setItem("tc_projects",JSON.stringify(all)); return;
+    }
+    const pd = await this.projectsDir(true);
+    try{ await pd.removeEntry(`proj_${id}.json`); }catch(e){}
+  },
 };
 
 /* Migrations : v1 (mono-équipe) -> v2 (équipes/lieux) -> v3 (profils cumulables) */
@@ -470,6 +504,10 @@ function migrate(cfg){
       delete p.role;
     }
     cfg.version = 3;
+  }
+  if(cfg.version<4){
+    for(const p of cfg.people||[]) if(p.skill===undefined) p.skill = "";
+    cfg.version = 4;
   }
   return cfg;
 }
@@ -539,6 +577,7 @@ async function afterConnect(){
   config = await store.loadConfig();
   if(!config){ showSetup(); return; }
   requests = await store.loadRequests();
+  projects = await store.loadProjects();
   showLogin(false);
 }
 function showSetup(){
@@ -623,6 +662,7 @@ async function reloadData(showToast){
     const c = await store.loadConfig();
     if(c) config = c;
     requests = await store.loadRequests();
+    projects = await store.loadProjects();
     if(currentUser) currentUser = personById(currentUser.id) || currentUser;
     render();
     if(showToast) toast("Données rechargées ✓");
@@ -898,52 +938,139 @@ function viewCalendar(){
   </div>`;
 }
 
-/* ---------- Vue : Capacity plan (chef de projet) ---------- */
-function personMonthCapacity(p, y, m, includePending){
-  const a = iso(new Date(y,m,1)), b = iso(new Date(y,m+1,0));
-  let cap = openDaysSet(a, b, null, locHolidaySet(p.locationId));
-  for(const r of requests){
-    if(r.personId!==p.id || !TYPES[r.type].absent) continue;
-    if(r.status==="approved" || (includePending && r.status==="pending"))
-      cap -= openDaysInRange(r, a, b, p);
-  }
-  return cap;
+/* ---------- Capacity plan : calculs ---------- */
+function monthBounds(y,m){ return [iso(new Date(y,m,1)), iso(new Date(y,m+1,0))]; }
+function personMonthOpen(p,y,m){
+  const [a,b]=monthBounds(y,m);
+  return openDaysSet(a,b,null,locHolidaySet(p.locationId));
 }
-function fmtDays(n){ return Number.isInteger(n) ? n : n.toFixed(1); }
+function personMonthAbsent(p,y,m,status){
+  const [a,b]=monthBounds(y,m);
+  let n=0;
+  for(const r of requests){
+    if(r.personId!==p.id || !TYPES[r.type].absent || r.status!==status) continue;
+    n += openDaysInRange(r,a,b,p);
+  }
+  return n;
+}
+function personMonthAllocPct(p,y,m){
+  const key = `${y}-${pad(m+1)}`;
+  let pct=0;
+  for(const pr of projects){
+    if(pr.active===false) continue;
+    const a = pr.allocations && pr.allocations[p.id];
+    if(a && a[key]) pct += a[key];
+  }
+  return pct;
+}
+/* Capacité restante = jours ouvrés du lieu − absences VALIDÉES − affectations
+   projets (% du mois). Les demandes en attente ne sont jamais déduites. */
+function personMonthRemaining(p,y,m){
+  const open = personMonthOpen(p,y,m);
+  return open - personMonthAbsent(p,y,m,"approved") - open*personMonthAllocPct(p,y,m)/100;
+}
+function fmtDays(n){ n = Math.round(n*10)/10; return Number.isInteger(n) ? n : n.toFixed(1); }
+function monthName(y,m,short){ return new Date(y,m,1).toLocaleDateString("fr-FR",{month:short?"short":"long"}); }
+
+/* ---------- Histogramme SVG : capacité restante ---------- */
+const TEAM_COLORS = ["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#4a3aa7","#e34948"];
+const teamColor = tid => TEAM_COLORS[Math.max(0,config.teams.findIndex(t=>t.id===tid)) % TEAM_COLORS.length];
+function niceStep(x){
+  const p=Math.pow(10,Math.floor(Math.log10(Math.max(x,1)))), n=x/p;
+  return (n<=1?1:n<=2?2:n<=5?5:10)*p;
+}
+function capacityChart(seriesList, y){
+  if(!seriesList.length) return "";
+  const H=210, padT=14, padB=24, padL=40, padR=8;
+  const nS=seriesList.length, bw=nS>1?9:26, gapBar=2, gapGroup=nS>1?16:22;
+  const groupW=nS*bw+(nS-1)*gapBar;
+  const W=padL+padR+12*groupW+11*gapGroup;
+  let maxV=1, minV=0;
+  for(const s of seriesList) for(const v of s.vals){ if(v>maxV)maxV=v; if(v<minV)minV=v; }
+  const span=maxV-minV;
+  const sy=v=>padT+(maxV-v)/span*(H-padT-padB);
+  const y0=sy(0);
+  const step=niceStep(span/4);
+  let grid="";
+  for(let g=Math.ceil(minV/step)*step; g<=maxV+0.001; g+=step){
+    grid += `<line x1="${padL}" x2="${W-padR}" y1="${sy(g)}" y2="${sy(g)}" stroke="#e1e0d9" stroke-width="1"/>`+
+            `<text x="${padL-5}" y="${sy(g)+3.5}" text-anchor="end" font-size="10" fill="#898781">${fmtDays(g)}</text>`;
+  }
+  let bars="", labels="";
+  for(let m=0;m<12;m++){
+    const gx=padL+m*(groupW+gapGroup);
+    labels += `<text x="${gx+groupW/2}" y="${H-7}" text-anchor="middle" font-size="10" fill="#898781">${monthName(y,m,true)}</text>`;
+    seriesList.forEach((s,i)=>{
+      const v=s.vals[m], x=gx+i*(bw+gapBar);
+      const hgt=Math.max(Math.abs(sy(v)-y0),0.5);
+      bars += `<rect x="${x}" y="${v>=0?sy(v):y0}" width="${bw}" height="${hgt}" fill="${s.color}" rx="2"`+
+              `${v<-0.001?' stroke="#d03b3b" stroke-width="1.5"':''}>`+
+              `<title>${esc(s.label)} — ${monthName(y,m,false)} ${y} : ${fmtDays(v)} j-p restants</title></rect>`;
+    });
+  }
+  return `<div class="calwrap" style="margin-bottom:12px">
+    <svg width="${W}" height="${H}" role="img" aria-label="Capacité restante par équipe et par mois (jours-personnes)">
+      ${grid}${bars}
+      <line x1="${padL}" x2="${W-padR}" y1="${y0}" y2="${y0}" stroke="#c3c2b7" stroke-width="1"/>
+      ${labels}
+    </svg>
+  </div>`;
+}
+function teamSkills(tid){
+  return [...new Set(activePeople().filter(p=>p.teamId===tid && (p.skill||"").trim())
+                                   .map(p=>p.skill.trim()))].sort((a,b)=>a.localeCompare(b,"fr"));
+}
 function viewCapacity(){
   const y = capYear;
   const curM = (y===now.getFullYear()) ? now.getMonth() : -1;
-  const mNames = [...Array(12)].map((_,m)=>new Date(y,m,1).toLocaleDateString("fr-FR",{month:"short"}));
   const head = `<tr><th class="person">${capTeam==="all"?"Équipe":"Personne"}</th>
-    ${mNames.map((n,m)=>`<th ${m===curM?'style="background:#dbeafe"':''}>${n}</th>`).join("")}<th>Année</th></tr>`;
+    ${[...Array(12)].map((_,m)=>`<th ${m===curM?'style="background:#dbeafe"':''}>${monthName(y,m,true)}</th>`).join("")}<th>Année</th></tr>`;
 
-  let rows = [];
-  const totals = Array(12).fill(0);
-  const mkRow = (label, sub, vals, strong)=>{
+  const cell = (v,pend,cur)=>{
+    const neg = v<-0.001;
+    return `<td${cur?' style="background:#eff6ff"':''}>${neg?`<span style="color:var(--danger); font-weight:700">${fmtDays(v)}</span>`:fmtDays(v)}`+
+      `${pend>0.001?`<div class="pend-note" title="${fmtDays(pend)} j de congés en attente de validation — non déduits tant que non validés">−${fmtDays(pend)} ?</div>`:""}</td>`;
+  };
+  const mkRow = (label, sub, vals, pends, strong)=>{
     const sum = vals.reduce((s,v)=>s+v,0);
     return `<tr${strong?' class="caprow"':''}><td class="person">${esc(label)}${sub?`<br><span class="sub">${esc(sub)}</span>`:""}</td>
-      ${vals.map((v,m)=>`<td${m===curM?' style="background:#eff6ff"':''}>${fmtDays(v)}</td>`).join("")}
+      ${vals.map((v,m)=>cell(v,pends?pends[m]:0,m===curM)).join("")}
       <td><b>${fmtDays(sum)}</b></td></tr>`;
   };
+  let rows=[], series=[];
+  let totals=Array(12).fill(0), pendTot=Array(12).fill(0);
+  const sumMonths = (members, fn)=>[...Array(12)].map((_,m)=>members.reduce((s,p)=>s+fn(p,y,m),0));
   if(capTeam==="all"){
     for(const t of config.teams){
       const members = activePeople().filter(p=>p.teamId===t.id);
       if(!members.length) continue;
-      const vals = [...Array(12)].map((_,m)=>
-        members.reduce((s,p)=>s+personMonthCapacity(p,y,m,capPending),0));
-      vals.forEach((v,m)=>totals[m]+=v);
-      rows.push(mkRow(t.name, members.length+" pers.", vals));
+      const vals = sumMonths(members, personMonthRemaining);
+      const pends = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
+      series.push({label:t.name, color:teamColor(t.id), vals});
+      vals.forEach((v,m)=>totals[m]+=v); pends.forEach((v,m)=>pendTot[m]+=v);
+      rows.push(mkRow(t.name, members.length+" pers.", vals, pends));
     }
+    rows.push(mkRow("Total", null, totals, pendTot, true));
   }else{
-    const members = activePeople().filter(p=>p.teamId===capTeam)
-      .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+    let members = activePeople().filter(p=>p.teamId===capTeam);
+    if(capSkill!=="all") members = members.filter(p=>(p.skill||"").trim()===capSkill);
+    members.sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+    totals = sumMonths(members, personMonthRemaining);
+    pendTot = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
+    series.push({label:(teamById(capTeam)?.name||"")+(capSkill!=="all"?" · "+capSkill:""), color:teamColor(capTeam), vals:totals});
     for(const p of members){
-      const vals = [...Array(12)].map((_,m)=>personMonthCapacity(p,y,m,capPending));
-      vals.forEach((v,m)=>totals[m]+=v);
-      rows.push(mkRow(p.name, `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}`, vals));
+      const vals = [...Array(12)].map((_,m)=>personMonthRemaining(p,y,m));
+      const pends = [...Array(12)].map((_,m)=>personMonthAbsent(p,y,m,"pending"));
+      rows.push(mkRow(p.name,
+        `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}${p.skill?` · ${p.skill}`:""}`,
+        vals, pends));
     }
+    rows.push(mkRow("Total", null, totals, pendTot, true));
   }
-  rows.push(mkRow("Total", null, totals, true));
+  const skills = capTeam==="all" ? [] : teamSkills(capTeam);
+  const legend = series.length>1 ? `<div class="legend" style="margin:0 0 8px">
+      ${series.map(s=>`<span><span class="sw" style="background:${s.color}"></span>${esc(s.label)}</span>`).join("")}
+    </div>` : "";
   return `
   <div class="card">
     <div class="actions" style="margin-bottom:12px">
@@ -951,33 +1078,123 @@ function viewCapacity(){
       <b style="min-width:60px; text-align:center">${y}</b>
       <button class="btn small secondary" id="capa-next">▶</button>
       <select id="capa-team" style="max-width:240px">${teamOptions(capTeam,true)}</select>
-      <label style="display:inline; margin:0"><input type="checkbox" id="capa-pending" ${capPending?"checked":""}> Déduire aussi les demandes en attente</label>
+      ${capTeam!=="all" && skills.length ? `<select id="capa-skill" style="max-width:200px">
+        <option value="all">Toutes les compétences</option>
+        ${skills.map(s=>`<option value="${esc(s)}" ${capSkill===s?"selected":""}>${esc(s)}</option>`).join("")}
+      </select>`:""}
     </div>
+    <h2>Capacité restante ${capTeam==="all"?"par équipe":"— "+esc(teamById(capTeam)?.name||"")} (jours-personnes)</h2>
+    ${capacityChart(series, y)}
+    ${legend}
     <div class="calwrap">
       <table class="cal">${head}${rows.join("")}</table>
     </div>
-    <p class="muted" style="margin-top:10px">Capacité en jours-personnes : jours ouvrés du mois selon le lieu de chacun
-    (week-ends et fériés locaux exclus) moins les absences validées${capPending?" et en attente":""}.
-    Le télétravail n'est pas déduit (jours travaillés). Sélectionnez une équipe pour le détail par personne.
-    L'onglet Projets permettra d'y confronter la charge planifiée.</p>
+    <p class="muted" style="margin-top:10px">Capacité restante = jours ouvrés du mois selon le lieu de chacun
+    (week-ends et fériés locaux exclus) − absences <b>validées</b> − affectations projets (en % du mois, onglet Projets).
+    Les congés en attente apparaissent en orange (« −x ? ») mais n'impactent la capacité qu'une fois validés.
+    Le télétravail n'est pas déduit. Une valeur négative (rouge) signale une surcharge.</p>
   </div>`;
 }
 
-/* ---------- Vue : Projets (chef de projet) — à construire ---------- */
+/* ---------- Vue : Projets (chef de projet) ---------- */
+function projectOverloads(y){
+  const out=[];
+  for(const p of activePeople()){
+    for(let m=0;m<12;m++){
+      const pct = personMonthAllocPct(p,y,m);
+      if(pct>100) out.push(`${p.name} — ${monthName(y,m,false)} ${y} : ${pct} % affectés (tous projets)`);
+    }
+  }
+  return out;
+}
 function viewProjects(){
+  const y = projYear;
+  const pr = projects.find(p=>p.id===projSel);
+  const list = [...projects].sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  const listHtml = list.length ? `<div style="overflow-x:auto"><table>
+    <tr><th>Projet</th><th>Équipe</th><th>Compétence</th><th>Personnes affectées</th><th>Actif</th><th></th></tr>
+    ${list.map(p=>{
+      const n = Object.keys(p.allocations||{}).length;
+      return `<tr ${p.id===projSel?'style="background:#eff6ff"':''}>
+        <td><b>${esc(p.name)}</b></td>
+        <td><span class="sw" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${teamColor(p.teamId)};margin-right:5px"></span>${esc(teamById(p.teamId)?.name||"—")}</td>
+        <td>${esc(p.skill||"—")}</td>
+        <td>${n||"—"}</td>
+        <td style="text-align:center"><input type="checkbox" data-pract="${p.id}" ${p.active!==false?"checked":""}></td>
+        <td class="actions">
+          <button class="btn small" data-popen="${p.id}">Affectations</button>
+          <button class="btn small danger" data-pdel-proj="${p.id}">✕</button>
+        </td></tr>`;
+    }).join("")}
+  </table></div>` : `<p class="muted">Aucun projet pour le moment — créez le premier ci-dessous.</p>`;
+
+  const newSkills = teamSkills(config.teams[0].id);
+  const createHtml = `
+    <h2 style="margin-top:16px">➕ Nouveau projet</h2>
+    <div class="actions">
+      <input id="proj-new-name" placeholder="Nom du projet" style="max-width:220px">
+      <select id="proj-new-team" style="max-width:220px">${teamOptions(config.teams[0].id,false)}</select>
+      <input id="proj-new-skill" list="proj-skill-dl" placeholder="Compétence visée" style="max-width:180px">
+      <datalist id="proj-skill-dl">${newSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
+      <button class="btn small" id="btn-add-proj">Créer</button>
+    </div>
+    <p class="muted" style="margin-top:6px">La compétence est proposée d'après celles des membres de l'équipe choisie
+    (renseignées dans Paramètres → Personnes), mais reste libre.</p>`;
+
+  let editorHtml = "";
+  if(pr){
+    const allocated = Object.keys(pr.allocations||{}).map(personById).filter(Boolean)
+      .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+    const addable = activePeople().filter(p=>!(pr.allocations||{})[p.id])
+      .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+    const rows = allocated.map(p=>{
+      const a = pr.allocations[p.id]||{};
+      return `<tr><td class="person">${esc(p.name)}<br><span class="sub">${esc(teamById(p.teamId)?.name||"")} · ${esc(p.skill||"—")}</span></td>
+        ${[...Array(12)].map((_,m)=>{
+          const key=`${y}-${pad(m+1)}`;
+          return `<td><input type="number" min="0" max="100" step="5" style="width:52px; text-align:right"
+            data-alloc="${p.id}|${key}" value="${a[key]||""}" placeholder="0"></td>`;
+        }).join("")}
+        <td><button class="btn small danger" data-arem="${p.id}" title="Retirer du projet">✕</button></td></tr>`;
+    }).join("");
+    const overloads = projectOverloads(y);
+    editorHtml = `
+    <div class="card">
+      <div class="actions" style="margin-bottom:10px">
+        <h2 style="margin:0">🗓 Affectations — ${esc(pr.name)}
+          <span class="muted">(${esc(teamById(pr.teamId)?.name||"")}${pr.skill?" · "+esc(pr.skill):""})</span></h2>
+        <button class="btn small secondary" id="proj-prev">◀</button>
+        <b>${y}</b>
+        <button class="btn small secondary" id="proj-next">▶</button>
+        <button class="btn small secondary" id="proj-close">Fermer</button>
+      </div>
+      ${allocated.length? `<div class="calwrap"><table class="cal">
+        <tr><th class="person">Personne</th>${[...Array(12)].map((_,m)=>`<th>${monthName(y,m,true)}</th>`).join("")}<th></th></tr>
+        ${rows}
+      </table></div>` : `<p class="muted">Aucune personne affectée pour l'instant.</p>`}
+      <div class="actions" style="margin-top:10px">
+        <select id="proj-person-sel" style="max-width:240px">
+          ${addable.map(p=>`<option value="${p.id}">${esc(p.name)} (${esc(teamById(p.teamId)?.name||"")})</option>`).join("")}
+        </select>
+        <button class="btn small" id="proj-add-person" ${addable.length?"":"disabled"}>Ajouter la personne</button>
+        <button class="btn small ok" id="btn-save-alloc" ${allocated.length?"":"disabled"}>💾 Enregistrer les affectations</button>
+      </div>
+      <p class="muted" style="margin-top:8px">Affectation en % du temps de la personne, mois par mois — utile pour les
+      personnes transverses réparties sur plusieurs projets. Vide = 0 %. La capacité restante (onglet Capacity plan)
+      déduit ces affectations.</p>
+      ${overloads.length? `<div class="notice err" style="margin-top:8px"><b>Surcharge (&gt;100 % tous projets confondus) :</b><br>${overloads.map(esc).join("<br>")}</div>`:""}
+    </div>`;
+  }
+
   return `
   <div class="card">
-    <h2>📁 Projets — en construction</h2>
-    <p style="margin-bottom:10px">Cet onglet, réservé au profil Chef de projet, permettra d'ajuster le capacity plan :</p>
-    <ul style="padding-left:20px; line-height:1.9">
-      <li>créer des projets et leur période ;</li>
-      <li>affecter des personnes à un projet (en % de temps ou en jours par mois) ;</li>
-      <li>comparer la charge planifiée à la capacité disponible (onglet Capacity plan) ;</li>
-      <li>signaler les surcharges et les périodes de sous-utilisation.</li>
-    </ul>
-    <p class="muted" style="margin-top:10px">En attendant, l'onglet Capacity plan donne déjà la capacité disponible
-    par équipe et par personne, mois par mois.</p>
-  </div>`;
+    <h2>📁 Projets</h2>
+    <p class="muted" style="margin-bottom:10px">Un projet vise une équipe et une compétence de celle-ci ;
+    les affectations peuvent néanmoins inclure des personnes d'autres équipes (transverses).</p>
+    ${listHtml}
+    ${createHtml}
+  </div>
+  ${editorHtml}`;
 }
 
 /* ---------- Vue : Validation (admin) ---------- */
@@ -1082,7 +1299,7 @@ function viewSettings(){
   <div class="card">
     <h2>👤 Personnes</h2>
     <div style="overflow-x:auto"><table>
-      <tr><th>Nom</th><th>Login Windows</th><th>Profils</th><th>Équipe</th><th>Lieu</th><th>Contrat</th>
+      <tr><th>Nom</th><th>Login Windows</th><th>Profils</th><th>Compétence</th><th>Équipe</th><th>Lieu</th><th>Contrat</th>
           <th>CP/an</th><th>RTT/an</th><th>Cible j.</th><th>Actif</th><th></th></tr>
       ${people.map(p=>`<tr>
         <td><input style="min-width:130px" data-pname="${p.id}" value="${esc(p.name)}"></td>
@@ -1091,6 +1308,7 @@ function viewSettings(){
           <label style="display:inline; margin:0; font-size:12px"><input type="checkbox" data-padmin="${p.id}" ${(p.roles||[]).includes("admin")?"checked":""}> Admin</label><br>
           <label style="display:inline; margin:0; font-size:12px"><input type="checkbox" data-pcdp="${p.id}" ${(p.roles||[]).includes("cdp")?"checked":""}> Chef de projet</label>
         </td>
+        <td><input style="min-width:100px" data-pskill="${p.id}" value="${esc(p.skill||"")}" placeholder="ex : Data eng."></td>
         <td><select data-pteam="${p.id}">${teamOptions(p.teamId,false)}</select></td>
         <td><select data-ploc="${p.id}">${locOptions(p.locationId)}</select></td>
         <td><select data-pcontract="${p.id}"><option value="interne" ${p.contract!=="externe"?"selected":""}>Interne</option><option value="externe" ${p.contract==="externe"?"selected":""}>Externe</option></select></td>
@@ -1110,7 +1328,9 @@ function viewSettings(){
     <p class="muted" style="margin-top:8px">Profils cumulables — sans case cochée, la personne a le profil
     <b>standard</b> : poser/annuler ses propres demandes et voir le planning d'équipe. <b>Admin</b> ajoute la
     validation des congés et la gestion des personnes/équipes/lieux ; <b>Chef de projet</b> ajoute le capacity
-    plan et l'onglet Projets. Le login Windows permet la connexion automatique via <b>Lancer.cmd</b> (casse ignorée).
+    plan et l'onglet Projets. La <b>compétence</b> (texte libre, ex : Data engineering, Support, BA…) sert au
+    ciblage des projets et au filtre du capacity plan. Le login Windows permet la connexion automatique via
+    <b>Lancer.cmd</b> (casse ignorée).
     Cible j. = jours travaillés attendus dans l'année (par défaut : interne ${CONTRACTS.interne.target}, externe ${CONTRACTS.externe.target}).
     « Désactiver » (décocher Actif) masque la personne sans perdre son historique.</p>
   </div>
@@ -1241,8 +1461,70 @@ function bindAfterRender(){
   if(q("cal-team")) q("cal-team").onchange = e=>{ calTeam=e.target.value; render(); };
   if(q("capa-prev")) q("capa-prev").onclick = ()=>{ capYear--; render(); };
   if(q("capa-next")) q("capa-next").onclick = ()=>{ capYear++; render(); };
-  if(q("capa-team")) q("capa-team").onchange = e=>{ capTeam=e.target.value; render(); };
-  if(q("capa-pending")) q("capa-pending").onchange = e=>{ capPending=e.target.checked; render(); };
+  if(q("capa-team")) q("capa-team").onchange = e=>{ capTeam=e.target.value; capSkill="all"; render(); };
+  if(q("capa-skill")) q("capa-skill").onchange = e=>{ capSkill=e.target.value; render(); };
+
+  /* Projets (chef de projet) */
+  if(q("proj-new-team")) q("proj-new-team").onchange = e=>{
+    const dl = q("proj-skill-dl");
+    if(dl) dl.innerHTML = teamSkills(e.target.value).map(s=>`<option value="${esc(s)}">`).join("");
+  };
+  if(q("btn-add-proj")) q("btn-add-proj").onclick = async ()=>{
+    if(!isCdp()) return;
+    const name = q("proj-new-name").value.trim();
+    if(!name) return;
+    const p = {id:uid(), name, teamId:q("proj-new-team").value, skill:q("proj-new-skill").value.trim(),
+               active:true, allocations:{}, createdBy:currentUser.id, createdAt:new Date().toISOString()};
+    await store.saveProject(p);
+    projects.push(p); projSel = p.id;
+    toast("Projet créé ✓ — ajoutez les personnes affectées"); render();
+  };
+  document.querySelectorAll("[data-popen]").forEach(b=>b.onclick=()=>{ projSel=b.dataset.popen; render(); });
+  document.querySelectorAll("[data-pdel-proj]").forEach(b=>b.onclick=async ()=>{
+    if(!isCdp()) return;
+    const p = projects.find(x=>x.id===b.dataset.pdelProj);
+    if(!confirm(`Supprimer le projet « ${p.name} » et ses affectations ?`)) return;
+    await store.deleteProject(p.id);
+    projects = projects.filter(x=>x.id!==p.id);
+    if(projSel===p.id) projSel=null;
+    toast("Projet supprimé"); render();
+  });
+  document.querySelectorAll("[data-pract]").forEach(cb=>cb.onchange=async ()=>{
+    if(!isCdp()) return;
+    const p = projects.find(x=>x.id===cb.dataset.pract);
+    p.active = cb.checked;
+    await store.saveProject(p);
+    toast(p.active?"Projet réactivé — affectations décomptées":"Projet suspendu — affectations ignorées");
+    render();
+  });
+  if(q("proj-prev")) q("proj-prev").onclick = ()=>{ projYear--; render(); };
+  if(q("proj-next")) q("proj-next").onclick = ()=>{ projYear++; render(); };
+  if(q("proj-close")) q("proj-close").onclick = ()=>{ projSel=null; render(); };
+  if(q("proj-add-person")) q("proj-add-person").onclick = async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    pr.allocations = pr.allocations||{};
+    pr.allocations[q("proj-person-sel").value] = {};
+    await store.saveProject(pr); render();
+  };
+  document.querySelectorAll("[data-arem]").forEach(b=>b.onclick=async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    delete pr.allocations[b.dataset.arem];
+    await store.saveProject(pr); render();
+  });
+  if(q("btn-save-alloc")) q("btn-save-alloc").onclick = async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    document.querySelectorAll("[data-alloc]").forEach(inp=>{
+      const [pid,key] = inp.dataset.alloc.split("|");
+      const v = Math.max(0, Math.min(100, parseInt(inp.value)||0));
+      pr.allocations[pid] = pr.allocations[pid]||{};
+      if(v>0) pr.allocations[pid][key] = v; else delete pr.allocations[pid][key];
+    });
+    await store.saveProject(pr);
+    toast("Affectations enregistrées ✓"); render();
+  };
   if(q("team-filter")) q("team-filter").onchange = e=>{ teamViewFilter=e.target.value; render(); };
   if(q("btn-export-csv")) q("btn-export-csv").onclick = exportCsv;
   if(q("btn-change-folder")) q("btn-change-folder").onclick = async ()=>{
@@ -1282,6 +1564,7 @@ function bindAfterRender(){
         if(g("padmin")?.checked) p.roles.push("admin");
         if(g("pcdp")?.checked) p.roles.push("cdp");
       }
+      if(g("pskill")) p.skill = g("pskill").value.trim();
       if(g("pteam")) p.teamId = g("pteam").value;
       if(g("ploc")) p.locationId = g("ploc").value;
       if(g("pcontract")) p.contract = g("pcontract").value;

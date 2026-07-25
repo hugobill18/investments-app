@@ -80,14 +80,38 @@ Paramètres → Personnes :
 - **Admin** : valider/refuser les demandes (onglet Validation), saisir pour
   un tiers, gérer personnes/équipes/lieux/fériés (onglets Équipes & soldes
   et Paramètres), export CSV ;
-- **Chef de projet** : onglet **Capacity plan** (capacité disponible en
-  jours-personnes, par équipe ou par personne, mois par mois — jours ouvrés
-  du lieu moins absences validées, option pour déduire aussi les demandes
-  en attente) et onglet **Projets** (en construction : affectation des
-  personnes aux projets et confrontation charge/capacité).
+- **Chef de projet** : onglets **Capacity plan** et **Projets**.
 
 Un chef de projet non admin ne peut pas valider de congés ; un admin non
-chef de projet ne voit pas le capacity plan.
+chef de projet ne voit pas le capacity plan. Dans l'organisation de base :
+Admin = Jeremy, Jerome, Youssef ; Chef de projet = Jeremy, Jerome, Firas,
+Samuel, Gwendoline.
+
+### Capacity plan (profil Chef de projet)
+
+- **Histogramme** de la capacité restante par équipe, mois par mois, puis le
+  détail chiffré en tableau ; en sélectionnant une équipe, détail par
+  personne avec filtre par **compétence**.
+- Capacité restante = jours ouvrés du mois selon le lieu de chacun −
+  absences **validées** − affectations projets (% du mois). Les congés
+  **en attente** apparaissent en orange (« −x ? ») mais n'impactent la
+  capacité qu'une fois validés. Une valeur négative (rouge) = surcharge.
+- Le télétravail n'est pas déduit (jours travaillés).
+
+### Projets & affectations (profil Chef de projet)
+
+- Un projet vise une **équipe** et une **compétence** de celle-ci (la
+  compétence de chaque personne se renseigne dans Paramètres → Personnes,
+  en texte libre).
+- Les affectations se font **par personne, par mois, en %** du temps — une
+  personne (notamment transverse) peut être répartie sur plusieurs projets
+  et venir d'une autre équipe que celle du projet.
+- Un total d'affectations supérieur à 100 % (tous projets confondus) est
+  signalé dans l'éditeur, et la capacité restante devient négative (rouge)
+  dans le capacity plan. Décocher « Actif » suspend un projet sans perdre
+  ses affectations.
+- Stockage : un fichier JSON par projet (`projects/proj_*.json`), même
+  logique anti-conflits que les demandes.
 
 ### Internes / externes
 
