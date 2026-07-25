@@ -69,6 +69,7 @@
   .legend{display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--muted);}
   .legend .sw{display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:4px;}
   .pend-note{color:#b45309; font-size:10px; line-height:1.2; white-space:nowrap;}
+  .smooth-note{color:#4a3aa7; font-size:10px; line-height:1.2; white-space:nowrap;}
   .overlay{position:fixed; inset:0; background:rgba(17,24,39,.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px;}
   .overlay .box{background:#fff; border-radius:10px; padding:28px; max-width:540px; width:100%; max-height:92vh; overflow:auto;}
   .overlay .box h2{margin-bottom:8px; font-size:18px;}
@@ -354,7 +355,7 @@ let projects = [];
 let currentUser = null;
 let currentTab = "me";
 let calYear, calMonth, calTeam = "all", teamViewFilter = "all", settingsLoc = null;
-let capYear, capTeam = "all", capSkill = "all";
+let capYear, capTeam = "all", capSkill = "all", capSmooth = true;
 let projSel = null, projYear;
 const now = new Date();
 calYear = now.getFullYear(); calMonth = now.getMonth();
@@ -860,10 +861,13 @@ function viewMe(){
   <div class="row" style="margin-top:16px">
     <div class="card" style="flex:1.2">
       <h2>➕ Nouvelle demande</h2>
-      ${requestForm("nf", false)}
-      <p class="muted" style="margin-top:10px">Congés payés, RTT et congés sans solde sont soumis à validation.
-      Télétravail, arrêt maladie et absence imprévue sont enregistrés directement.
-      Les jours sont décomptés selon les fériés de <b>${esc(locById(currentUser.locationId)?.name||"votre lieu")}</b>.</p>
+      ${isAdmin()?`<div class="notice info">Vous êtes administrateur : le champ « Personne » ci-dessous permet de
+      saisir pour vous-même ou pour n'importe quel membre de l'équipe (utile pour un arrêt maladie ou une
+      régularisation).</div>`:""}
+      ${requestForm("nf", isAdmin())}
+      <p class="muted" style="margin-top:10px">Congés payés, RTT et congés sans solde sont soumis à validation
+      (sauf saisie par un administrateur, auto-validée). Télétravail, arrêt maladie et absence imprévue sont
+      enregistrés directement. Les jours sont décomptés selon les fériés du lieu de la personne sélectionnée.</p>
     </div>
     <div class="card" style="flex:2">
       <h2>📋 Mes demandes & absences</h2>
@@ -976,11 +980,29 @@ function personMonthAllocPct(p,y,m){
   }
   return pct;
 }
+/* Simulation : lisse les CP/RTT restants (interne uniquement) sur les mois
+   restants de l'année pour projeter leur future prise. Année passée -> 0 ;
+   année en cours -> à partir du mois courant ; année future -> dès janvier. */
+function personMonthSmoothLeave(p,y,m){
+  if((p.contract||"interne")!=="interne") return 0;
+  const todayY=now.getFullYear(), todayM=now.getMonth();
+  if(y<todayY) return 0;
+  const startMonth = y===todayY ? todayM : 0;
+  if(m<startMonth) return 0;
+  const remainingMonths = 12-startMonth;
+  if(remainingMonths<=0) return 0;
+  const b = balances(p,y);
+  const remaining = Math.max(0,(b.cpLeft||0)) + Math.max(0,(b.rttLeft||0));
+  return remaining/remainingMonths;
+}
 /* Capacité restante = jours ouvrés du lieu − absences VALIDÉES − affectations
-   projets (% du mois). Les demandes en attente ne sont jamais déduites. */
-function personMonthRemaining(p,y,m){
+   projets (% du mois) [− simulation CP/RTT lissés, si activée].
+   Les demandes en attente ne sont jamais déduites. */
+function personMonthRemaining(p,y,m,smooth){
   const open = personMonthOpen(p,y,m);
-  return open - personMonthAbsent(p,y,m,"approved") - open*personMonthAllocPct(p,y,m)/100;
+  let v = open - personMonthAbsent(p,y,m,"approved") - open*personMonthAllocPct(p,y,m)/100;
+  if(smooth) v -= personMonthSmoothLeave(p,y,m);
+  return v;
 }
 function fmtDays(n){ n = Math.round(n*10)/10; return Number.isInteger(n) ? n : n.toFixed(1); }
 function monthName(y,m,short){ return new Date(y,m,1).toLocaleDateString("fr-FR",{month:short?"short":"long"}); }
@@ -1039,46 +1061,52 @@ function viewCapacity(){
   const head = `<tr><th class="person">${capTeam==="all"?"Équipe":"Personne"}</th>
     ${[...Array(12)].map((_,m)=>`<th ${m===curM?'style="background:#dbeafe"':''}>${monthName(y,m,true)}</th>`).join("")}<th>Année</th></tr>`;
 
-  const cell = (v,pend,cur)=>{
+  const cell = (v,pend,smooth,cur)=>{
     const neg = v<-0.001;
-    return `<td${cur?' style="background:#eff6ff"':''}>${neg?`<span style="color:var(--danger); font-weight:700">${fmtDays(v)}</span>`:fmtDays(v)}`+
-      `${pend>0.001?`<div class="pend-note" title="${fmtDays(pend)} j de congés en attente de validation — non déduits tant que non validés">−${fmtDays(pend)} ?</div>`:""}</td>`;
+    let notes = "";
+    if(pend>0.001) notes += `<div class="pend-note" title="${fmtDays(pend)} j de congés en attente de validation — non déduits tant que non validés">−${fmtDays(pend)} ?</div>`;
+    if(smooth>0.001) notes += `<div class="smooth-note" title="Simulation : part lissée des CP/RTT restants de cette personne sur les mois restants de l'année (${fmtDays(smooth)} j ce mois-ci) — déjà déduite de la valeur ci-dessus">~${fmtDays(smooth)}</div>`;
+    return `<td${cur?' style="background:#eff6ff"':''}>${neg?`<span style="color:var(--danger); font-weight:700">${fmtDays(v)}</span>`:fmtDays(v)}${notes}</td>`;
   };
-  const mkRow = (label, sub, vals, pends, strong)=>{
+  const mkRow = (label, sub, vals, pends, smooths, strong)=>{
     const sum = vals.reduce((s,v)=>s+v,0);
     return `<tr${strong?' class="caprow"':''}><td class="person">${esc(label)}${sub?`<br><span class="sub">${esc(sub)}</span>`:""}</td>
-      ${vals.map((v,m)=>cell(v,pends?pends[m]:0,m===curM)).join("")}
+      ${vals.map((v,m)=>cell(v,pends?pends[m]:0,smooths?smooths[m]:0,m===curM)).join("")}
       <td><b>${fmtDays(sum)}</b></td></tr>`;
   };
   let rows=[], series=[];
-  let totals=Array(12).fill(0), pendTot=Array(12).fill(0);
+  let totals=Array(12).fill(0), pendTot=Array(12).fill(0), smoothTot=Array(12).fill(0);
   const sumMonths = (members, fn)=>[...Array(12)].map((_,m)=>members.reduce((s,p)=>s+fn(p,y,m),0));
+  const remainFn = (p,yy,m)=>personMonthRemaining(p,yy,m,capSmooth);
   if(capTeam==="all"){
     for(const t of config.teams){
       const members = activePeople().filter(p=>p.teamId===t.id);
       if(!members.length) continue;
-      const vals = sumMonths(members, personMonthRemaining);
+      const vals = sumMonths(members, remainFn);
       const pends = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
+      const smooths = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
       series.push({label:t.name, color:teamColor(t.id), vals});
-      vals.forEach((v,m)=>totals[m]+=v); pends.forEach((v,m)=>pendTot[m]+=v);
-      rows.push(mkRow(t.name, members.length+" pers.", vals, pends));
+      vals.forEach((v,m)=>totals[m]+=v); pends.forEach((v,m)=>pendTot[m]+=v); smooths.forEach((v,m)=>smoothTot[m]+=v);
+      rows.push(mkRow(t.name, members.length+" pers.", vals, pends, capSmooth?smooths:null));
     }
-    rows.push(mkRow("Total", null, totals, pendTot, true));
+    rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, true));
   }else{
     let members = activePeople().filter(p=>p.teamId===capTeam);
     if(capSkill!=="all") members = members.filter(p=>(p.skill||"").trim()===capSkill);
     members.sort((a,b)=>a.name.localeCompare(b.name,"fr"));
-    totals = sumMonths(members, personMonthRemaining);
+    totals = sumMonths(members, remainFn);
     pendTot = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
+    smoothTot = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
     series.push({label:(teamById(capTeam)?.name||"")+(capSkill!=="all"?" · "+capSkill:""), color:teamColor(capTeam), vals:totals});
     for(const p of members){
-      const vals = [...Array(12)].map((_,m)=>personMonthRemaining(p,y,m));
+      const vals = [...Array(12)].map((_,m)=>personMonthRemaining(p,y,m,capSmooth));
       const pends = [...Array(12)].map((_,m)=>personMonthAbsent(p,y,m,"pending"));
+      const smooths = [...Array(12)].map((_,m)=>personMonthSmoothLeave(p,y,m));
       rows.push(mkRow(p.name,
         `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}${p.skill?` · ${p.skill}`:""}`,
-        vals, pends));
+        vals, pends, capSmooth?smooths:null));
     }
-    rows.push(mkRow("Total", null, totals, pendTot, true));
+    rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, true));
   }
   const skills = capTeam==="all" ? [] : teamSkills(capTeam);
   const legend = series.length>1 ? `<div class="legend" style="margin:0 0 8px">
@@ -1095,6 +1123,8 @@ function viewCapacity(){
         <option value="all">Toutes les compétences</option>
         ${skills.map(s=>`<option value="${esc(s)}" ${capSkill===s?"selected":""}>${esc(s)}</option>`).join("")}
       </select>`:""}
+      <label style="display:inline; margin:0"><input type="checkbox" id="capa-smooth" ${capSmooth?"checked":""}>
+        Simuler la prise des CP/RTT restants (lissée sur l'année)</label>
     </div>
     <h2>Capacité restante ${capTeam==="all"?"par équipe":"— "+esc(teamById(capTeam)?.name||"")} (jours-personnes)</h2>
     ${capacityChart(series, y)}
@@ -1103,8 +1133,12 @@ function viewCapacity(){
       <table class="cal">${head}${rows.join("")}</table>
     </div>
     <p class="muted" style="margin-top:10px">Capacité restante = jours ouvrés du mois selon le lieu de chacun
-    (week-ends et fériés locaux exclus) − absences <b>validées</b> − affectations projets (en % du mois, onglet Projets).
+    (week-ends et fériés locaux exclus) − absences <b>validées</b> − affectations projets (en % du mois, onglet Projets)
+    ${capSmooth?" − simulation des CP/RTT restants (voir « ~x » ci-dessous)":""}.
     Les congés en attente apparaissent en orange (« −x ? ») mais n'impactent la capacité qu'une fois validés.
+    ${capSmooth?`La simulation « ~x » répartit uniformément le solde CP+RTT restant de chaque interne sur les mois
+    restants de l'année, pour anticiper une prise de congés qui n'est pas encore posée — c'est une projection
+    indicative, pas une réservation réelle (décochez la case pour revenir aux seules absences actées).`:""}
     Le télétravail n'est pas déduit. Une valeur négative (rouge) signale une surcharge.</p>
   </div>`;
 }
@@ -1160,6 +1194,9 @@ function viewProjects(){
       .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
     const addable = activePeople().filter(p=>!(pr.allocations||{})[p.id])
       .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+    const groupMembers = activePeople().filter(p=>p.teamId===pr.teamId && (!pr.skill || (p.skill||"").trim()===pr.skill));
+    const defStartM = y===now.getFullYear() ? now.getMonth() : 0;
+    const monthOpts = sel=>[...Array(12)].map((_,m)=>`<option value="${m}" ${m===sel?"selected":""}>${monthName(y,m,false)}</option>`).join("");
     const rows = allocated.map(p=>{
       const a = pr.allocations[p.id]||{};
       return `<tr><td class="person">${esc(p.name)}<br><span class="sub">${esc(teamById(p.teamId)?.name||"")} · ${esc(p.skill||"—")}</span></td>
@@ -1196,6 +1233,17 @@ function viewProjects(){
       personnes transverses réparties sur plusieurs projets. Vide = 0 %. La capacité restante (onglet Capacity plan)
       déduit ces affectations.</p>
       ${overloads.length? `<div class="notice err" style="margin-top:8px"><b>Surcharge (&gt;100 % tous projets confondus) :</b><br>${overloads.map(esc).join("<br>")}</div>`:""}
+
+      <h3 style="margin-top:16px">Affectation groupée — toute l'équipe/compétence du projet</h3>
+      <p class="muted">Affecte en une fois le même % à ${groupMembers.length? esc(groupMembers.length+" personne(s) actives") : "aucune personne active"}
+      correspondant à ${esc(teamById(pr.teamId)?.name||"")}${pr.skill?" · "+esc(pr.skill):" (toutes compétences)"},
+      sur la période choisie. Chaque personne reste ensuite modifiable individuellement ci-dessus.</p>
+      <div class="actions">
+        <span class="muted">De</span> <select id="bulk-start-m" style="max-width:120px">${monthOpts(defStartM)}</select>
+        <span class="muted">à</span> <select id="bulk-end-m" style="max-width:120px">${monthOpts(11)}</select>
+        <span class="muted">%</span> <input type="number" id="bulk-pct" min="0" max="100" step="5" value="20" style="width:70px">
+        <button class="btn small" id="btn-bulk-alloc" ${groupMembers.length?"":"disabled"}>Affecter le groupe</button>
+      </div>
     </div>`;
   }
 
@@ -1460,7 +1508,7 @@ function bindForm(prefix, withPerson){
 }
 function bindAfterRender(){
   const q = id=>document.getElementById(id);
-  bindForm("nf", false);
+  bindForm("nf", isAdmin());
   bindForm("af", true);
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.del));
   document.querySelectorAll("[data-approve]").forEach(b=>b.onclick=()=>decide(b.dataset.approve,"approved"));
@@ -1476,6 +1524,7 @@ function bindAfterRender(){
   if(q("capa-next")) q("capa-next").onclick = ()=>{ capYear++; render(); };
   if(q("capa-team")) q("capa-team").onchange = e=>{ capTeam=e.target.value; capSkill="all"; render(); };
   if(q("capa-skill")) q("capa-skill").onchange = e=>{ capSkill=e.target.value; render(); };
+  if(q("capa-smooth")) q("capa-smooth").onchange = e=>{ capSmooth=e.target.checked; render(); };
 
   /* Projets (chef de projet) */
   if(q("proj-new-team")) q("proj-new-team").onchange = e=>{
@@ -1537,6 +1586,25 @@ function bindAfterRender(){
     });
     await store.saveProject(pr);
     toast("Affectations enregistrées ✓"); render();
+  };
+  if(q("btn-bulk-alloc")) q("btn-bulk-alloc").onclick = async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    const startM = parseInt(q("bulk-start-m").value), endM = parseInt(q("bulk-end-m").value);
+    const pct = Math.max(0, Math.min(100, parseInt(q("bulk-pct").value)||0));
+    if(endM<startM) return alert("Le mois de fin doit être après le mois de début.");
+    const members = activePeople().filter(p=>p.teamId===pr.teamId && (!pr.skill || (p.skill||"").trim()===pr.skill));
+    if(!members.length) return alert("Aucune personne active ne correspond à cette équipe/compétence.");
+    pr.allocations = pr.allocations||{};
+    for(const p of members){
+      pr.allocations[p.id] = pr.allocations[p.id]||{};
+      for(let m=startM; m<=endM; m++){
+        const key = `${projYear}-${pad(m+1)}`;
+        if(pct>0) pr.allocations[p.id][key] = pct; else delete pr.allocations[p.id][key];
+      }
+    }
+    await store.saveProject(pr);
+    toast(`${members.length} personne(s) affectée(s) à ${pct} % ✓`); render();
   };
   if(q("team-filter")) q("team-filter").onchange = e=>{ teamViewFilter=e.target.value; render(); };
   if(q("btn-export-csv")) q("btn-export-csv").onclick = exportCsv;

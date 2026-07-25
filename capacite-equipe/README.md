@@ -78,8 +78,9 @@ Paramètres → Personnes :
 - **Standard** (implicite, tout le monde) : poser/annuler ses propres
   demandes, voir le calendrier d'équipe ;
 - **Admin** : valider/refuser les demandes (onglet Validation), saisir pour
-  un tiers, gérer personnes/équipes/lieux/fériés (onglets Équipes & soldes
-  et Paramètres), export CSV ;
+  un tiers (le champ « Personne » apparaît directement dans Mon espace,
+  avec un rappel, ainsi que dans Équipes & soldes), gérer personnes/équipes/
+  lieux/fériés (onglets Équipes & soldes et Paramètres), export CSV ;
 - **Chef de projet** : onglets **Capacity plan** et **Projets**.
 
 Un chef de projet non admin ne peut pas valider de congés ; un admin non
@@ -104,19 +105,34 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   **en attente** apparaissent en orange (« −x ? ») mais n'impactent la
   capacité qu'une fois validés. Une valeur négative (rouge) = surcharge.
 - Le télétravail n'est pas déduit (jours travaillés).
+- **Simulation CP/RTT restants** (case à cocher, activée par défaut) : pour
+  chaque interne, le solde CP+RTT non encore posé est réparti uniformément
+  sur les mois restants de l'année (annotation violette « ~x » sous la
+  valeur, déjà déduite) — une projection indicative pour anticiper la prise
+  de congés à venir, pas une réservation réelle. Décocher la case revient
+  aux seules absences actées.
 
 ### Projets & affectations (profil Chef de projet)
 
 - Un projet vise une **équipe** et une **compétence** de celle-ci (la
   compétence de chaque personne se renseigne dans Paramètres → Personnes,
   en texte libre).
-- Les affectations se font **par personne, par mois, en %** du temps — une
-  personne (notamment transverse) peut être répartie sur plusieurs projets
-  et venir d'une autre équipe que celle du projet.
+- Deux façons d'affecter, combinables :
+  - **Affectation groupée** : un même % sur une période donnée pour toutes
+    les personnes actives de l'équipe/compétence visée par le projet, en un
+    clic (bloc « Affectation groupée » de l'éditeur) ;
+  - **Affectation individuelle** : par personne, par mois, en % du temps —
+    une personne (notamment transverse) peut être répartie sur plusieurs
+    projets et venir d'une autre équipe que celle du projet. Modifiable
+    après une affectation groupée pour ajuster cas par cas.
+- Le **% restant non affecté** d'une personne reste disponible pour sa
+  propre équipe (c'est exactement ce que montre le capacity plan : la
+  capacité restante déduit uniquement ce qui est explicitement affecté).
 - Un total d'affectations supérieur à 100 % (tous projets confondus) est
   signalé dans l'éditeur, et la capacité restante devient négative (rouge)
-  dans le capacity plan. Décocher « Actif » suspend un projet sans perdre
-  ses affectations.
+  dans le capacity plan — l'application avertit mais ne bloque pas la
+  saisie, à vous de trancher. Décocher « Actif » suspend un projet sans
+  perdre ses affectations.
 - Stockage : un fichier JSON par projet (`projects/proj_*.json`), même
   logique anti-conflits que les demandes.
 
