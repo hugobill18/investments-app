@@ -87,6 +87,13 @@ chef de projet ne voit pas le capacity plan. Dans l'organisation de base :
 Admin = Jeremy, Jerome, Youssef ; Chef de projet = Jeremy, Jerome, Firas,
 Samuel, Gwendoline.
 
+Les **compétences** de l'organisation de base : Business Analyst (Saloua,
+Nabila, Abibatou, Mustapha) ; Developer (Souha, Landry, Ali, Saleh, Marcin,
+Ghaith, Radha, Farid, Soumaya, Chaima, Sarra, Olivier, Laurent, Béraud) ;
+Support (Sambit, Vijay Kumar, Mohamed Ali, Samya) ; Project Manager (Firas,
+Samuel, Gwendoline) ; Tech Lead (Youssef, Walid) ; Manager (Jeremy) ;
+Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
+
 ### Capacity plan (profil Chef de projet)
 
 - **Histogramme** de la capacité restante par équipe, mois par mois, puis le

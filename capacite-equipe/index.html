@@ -313,6 +313,19 @@ const DEFAULT_ORG = [
     ["Youssef","interne","Paris",["admin"]], ["Firas","interne","Paris",["cdp"]],
     ["Gwendoline","interne","Paris",["cdp"]], ["Jeremy","interne","Paris",["admin","cdp"]]]},
 ];
+/* Compétence de chaque personne (texte libre, mais pré-remplie ici pour
+   l'organisation de base — modifiable ensuite dans Paramètres). */
+const DEFAULT_SKILLS = {
+  "Business Analyst": ["Saloua","Nabila","Abibatou","Mustapha"],
+  "Developer": ["Souha","Landry","Ali","Saleh","Marcin","Ghaith","Radha","Farid","Soumaya","Chaima","Sarra","Olivier","Laurent","Béraud"],
+  "Support": ["Sambit","Vijay Kumar","Mohamed Ali","Samya"],
+  "Project Manager": ["Firas","Samuel","Gwendoline"],
+  "Tech Lead": ["Youssef","Walid"],
+  "Manager": ["Jeremy"],
+  "Product Owner": ["Jerome"],
+};
+const SKILL_BY_NAME = Object.fromEntries(
+  Object.entries(DEFAULT_SKILLS).flatMap(([skill,names])=>names.map(n=>[n,skill])));
 function buildDefaultConfig(){
   const y = new Date().getFullYear();
   const locations = DEFAULT_LOCS.map(([name,gen],i)=>({id:"l"+i+"-"+uid(), name, gen}));
@@ -326,7 +339,7 @@ function buildDefaultConfig(){
     teams.push(t);
     for(const [name,contract,locName,roles] of def.members){
       people.push({id:uid()+Math.random().toString(36).slice(2,5), name, winLogin:"",
-        roles:roles||[], skill:"", teamId:t.id, locationId:locByName[locName], contract,
+        roles:roles||[], skill:SKILL_BY_NAME[name]||"", teamId:t.id, locationId:locByName[locName], contract,
         target:CONTRACTS[contract].target,
         cp:contract==="interne"?25:0, rtt:contract==="interne"?10:0, active:true});
     }
