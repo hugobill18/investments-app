@@ -197,8 +197,12 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   (ou en changeant son contrat tant que les champs CP/RTT/cible sont restés
   à l'un des deux défauts) — modifiables ensuite librement dans Paramètres.
 - La colonne « Projeté » (**Projected**) = jours ouvrés de l'année selon le
-  lieu − absences validées ; elle passe en rouge sous la cible. La cible est
-  modifiable par personne.
+  lieu − absences **validées** ; elle passe en rouge sous la cible. La cible
+  est modifiable par personne. **Important** : une demande de congé tant
+  qu'elle est « En attente » (**Pending**) ne modifie pas ce chiffre — il ne
+  bouge qu'une fois la demande validée. Une annotation « (−x pending) »
+  apparaît sous la valeur le temps qu'une demande reste en attente, pour ne
+  pas laisser croire à un chiffre figé/buggé.
 
 ### Date de fin de contrat (End date)
 
@@ -219,6 +223,45 @@ la date à laquelle elle quitte l'équipe. À partir de cette date :
 Ce champ est indépendant de la case « Actif » : il ne masque pas la
 personne, il fait juste disparaître sa capacité à la date prévue, sans
 attendre que l'admin pense à la désactiver manuellement le jour J.
+
+### Quota de télétravail (Remote work)
+
+Chaque **lieu** (Settings → Locations & public holidays) a sa propre
+politique de télétravail, réglable par un administrateur :
+- **Remote quota/yr** : nombre de jours de télétravail autorisés par an
+  pour les personnes de ce lieu. Laisser le champ **vide** = illimité et
+  **non suivi** (aucun compteur affiché — cas de Lisbonne et Tunis par
+  défaut). Une valeur, y compris **0**, est un vrai quota appliqué et
+  affiché (cas de Kuala Lumpur par défaut : 0, donc télétravail non
+  autorisé — toute journée posée fait passer le compteur en négatif,
+  visible en rouge, sans bloquer la saisie).
+- **Waiver bonus** : jours supplémentaires accordés uniquement aux
+  personnes ayant la case **« Remote exc. »** cochée dans Settings →
+  People (une dérogation validée par un admin). Paris est configuré par
+  défaut à 84 jours/an, +20 avec dérogation (104 au total).
+- **Enforce on-site days** : active, pour les personnes de ce lieu, la
+  règle du jour de présence hebdomadaire obligatoire de leur équipe (voir
+  ci-dessous). Coché par défaut uniquement pour Paris.
+
+Le compteur restant s'affiche dans **Mon espace** et **Teams & balances**
+à côté des soldes CP/RTT (« Remote days left » / « — » si non suivi).
+
+### Jour de présence obligatoire par équipe (On-site day)
+
+Chaque **équipe** (Settings → Teams, colonne **On-site day**) peut avoir un
+jour de la semaine où ses membres doivent être sur site — appliqué
+uniquement aux personnes situées dans un lieu où « Enforce on-site days »
+est actif (Paris par défaut). Ce jour-là, une demande de télétravail n'est
+plus auto-enregistrée : elle passe **en attente de validation**, comme un
+congé (les jours restants de la période concernée restent, eux,
+auto-enregistrés normalement). Une saisie faite par un administrateur
+reste toujours auto-validée, comme pour tous les autres types.
+
+Valeurs par défaut de l'organisation de base : équipes « Datahub » (Master
+Datahub Pricing, Master Datahub Atlas, Casa Datahub) → **lundi** ; 3MS &
+Pricing project → **vendredi** ; Stability of production → **mercredi** ;
+Transversal → aucune règle. Un rappel s'affiche dans Mon espace pour toute
+personne concernée par une règle active.
 
 ### Jours fériés — cas de Kuala Lumpur et Tunis
 

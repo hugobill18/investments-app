@@ -187,6 +187,8 @@ const CONTRACTS = {
 /* Cumulative profiles. Everyone has the implicit "standard" profile
    (submit/cancel their own leave, view the team schedule). */
 const PROFILES = {admin:"Administrator", cdp:"Project manager"};
+/* Weekday options for a team's mandatory on-site day (JS Date.getDay()). */
+const WEEKDAY_OPTS = [["","None"],["1","Monday"],["2","Tuesday"],["3","Wednesday"],["4","Thursday"],["5","Friday"]];
 
 /* ---------- Date helpers ---------- */
 const pad = n => String(n).padStart(2,"0");
@@ -301,6 +303,23 @@ const HOLGENS = {
 /* ---------- Default organization (created on first launch, editable afterwards) ----------
    Member format: [name, contract, location, optional roles] */
 const DEFAULT_LOCS = [["Paris","FR"],["Lisbon","PT"],["Kuala Lumpur","MY"],["Tunis","TN"]];
+/* Remote-work policy per location: remoteQuota (days/year, null = unlimited
+   and untracked — no counter shown at all), remoteWaiverBonus (extra days
+   granted to a person with an approved exception), enforceOnsiteDays
+   (whether that location's teams' mandatory on-site weekday applies). */
+const DEFAULT_REMOTE_POLICY = {
+  "Paris":{remoteQuota:84, remoteWaiverBonus:20, enforceOnsiteDays:true},
+  "Kuala Lumpur":{remoteQuota:0, remoteWaiverBonus:0, enforceOnsiteDays:false},
+  "Lisbon":{remoteQuota:null, remoteWaiverBonus:0, enforceOnsiteDays:false},
+  "Tunis":{remoteQuota:null, remoteWaiverBonus:0, enforceOnsiteDays:false},
+};
+/* Mandatory weekly on-site day per team (JS Date.getDay(): 1=Mon..5=Fri,
+   null = no rule), enforced only at locations with enforceOnsiteDays. */
+const DEFAULT_ONSITE_DAY = {
+  "Master Datahub Pricing":1, "Master Datahub Atlas":1, "Casa Datahub":1, // Datahub teams: Monday
+  "3MS & Pricing project":5,   // Friday
+  "Stability of production":3, // Wednesday
+};
 /* Trigram shown before each person's first name (lists, schedules).
    Editable afterwards in Settings → Teams. */
 const DEFAULT_TRIGRAMS = {
@@ -360,23 +379,27 @@ const SKILL_BY_NAME = Object.fromEntries(
   Object.entries(DEFAULT_SKILLS).flatMap(([skill,names])=>names.map(n=>[n,skill])));
 function buildDefaultConfig(){
   const y = new Date().getFullYear();
-  const locations = DEFAULT_LOCS.map(([name,gen],i)=>({id:"l"+i+"-"+uid(), name, gen}));
+  const locations = DEFAULT_LOCS.map(([name,gen],i)=>{
+    const pol = DEFAULT_REMOTE_POLICY[name] || {remoteQuota:null, remoteWaiverBonus:0, enforceOnsiteDays:false};
+    return {id:"l"+i+"-"+uid(), name, gen, ...pol};
+  });
   const locByName = Object.fromEntries(locations.map(l=>[l.name,l.id]));
   const holidays = [];
   for(const l of locations) for(const yy of [y,y+1])
     for(const h of HOLGENS[l.gen].gen(yy)) holidays.push({...h, locationId:l.id});
   const teams=[], people=[];
   DEFAULT_ORG.forEach((def,ti)=>{
-    const t = {id:"t"+ti+"-"+uid(), name:def.team, trigram:DEFAULT_TRIGRAMS[def.team]||autoTrigram(def.team)};
+    const t = {id:"t"+ti+"-"+uid(), name:def.team, trigram:DEFAULT_TRIGRAMS[def.team]||autoTrigram(def.team),
+               onsiteDay: DEFAULT_ONSITE_DAY[def.team] ?? null};
     teams.push(t);
     for(const [name,contract,locName,roles] of def.members){
       people.push({id:uid()+Math.random().toString(36).slice(2,5), name, winLogin:"",
         roles:roles||[], skill:SKILL_BY_NAME[name]||"", teamId:t.id, locationId:locByName[locName], contract,
-        target:CONTRACTS[contract].target,
+        remoteWaiver:false, target:CONTRACTS[contract].target,
         cp:CONTRACTS[contract].cp, rtt:CONTRACTS[contract].rtt, endDate:"", active:true});
     }
   });
-  return {version:6, teams, locations, people, holidays};
+  return {version:7, teams, locations, people, holidays};
 }
 
 /* ---------- Global state ---------- */
@@ -570,6 +593,17 @@ function migrate(cfg){
     for(const p of cfg.people||[]) if(p.endDate===undefined) p.endDate = "";
     cfg.version = 6;
   }
+  if(cfg.version<7){
+    for(const l of cfg.locations||[]){
+      const pol = DEFAULT_REMOTE_POLICY[l.name] || {remoteQuota:null, remoteWaiverBonus:0, enforceOnsiteDays:false};
+      if(l.remoteQuota===undefined) l.remoteQuota = pol.remoteQuota;
+      if(l.remoteWaiverBonus===undefined) l.remoteWaiverBonus = pol.remoteWaiverBonus;
+      if(l.enforceOnsiteDays===undefined) l.enforceOnsiteDays = pol.enforceOnsiteDays;
+    }
+    for(const t of cfg.teams||[]) if(t.onsiteDay===undefined) t.onsiteDay = DEFAULT_ONSITE_DAY[t.name] ?? null;
+    for(const p of cfg.people||[]) if(p.remoteWaiver===undefined) p.remoteWaiver = false;
+    cfg.version = 7;
+  }
   return cfg;
 }
 /* Project migration: old single teamId/skill -> targets[] array */
@@ -671,7 +705,7 @@ function showSetup(){
     }else{
       me = {id:uid(), name, winLogin, roles:["admin"],
         teamId:config.teams[config.teams.length-1].id, locationId:config.locations[0].id,
-        contract:"interne", target:CONTRACTS.interne.target, cp, rtt, endDate:"", active:true};
+        contract:"interne", target:CONTRACTS.interne.target, cp, rtt, endDate:"", remoteWaiver:false, active:true};
       config.people.push(me);
     }
     localStorage.setItem("tc_user", me.id);
@@ -742,6 +776,26 @@ async function reloadData(showToast){
 /* =====================================================================
    Business actions (role rules are applied here AND in the UI)
    ===================================================================== */
+/* Mandatory weekly on-site day: a team can require its members to be
+   on-site on a given weekday, enforced only at locations flagged
+   enforceOnsiteDays (e.g. Paris). Remote work requested on that day
+   therefore requires admin approval instead of being auto-declarative. */
+function remoteDayNeedsApproval(person, dateIso){
+  const loc = locById(person.locationId);
+  if(!loc || !loc.enforceOnsiteDays) return false;
+  const team = teamById(person.teamId);
+  if(!team || team.onsiteDay===null || team.onsiteDay===undefined || team.onsiteDay==="") return false;
+  return fromIso(dateIso).getDay() === Number(team.onsiteDay);
+}
+function requestNeedsApproval(type, person, startIso, endIso){
+  if(TYPES[type].needsApproval) return true;
+  if(type!=="TT") return false;
+  for(let d=fromIso(startIso); iso(d)<=endIso; d=addDays(d,1)){
+    if(isWeekend(d)) continue;
+    if(remoteDayNeedsApproval(person, iso(d))) return true;
+  }
+  return false;
+}
 async function createRequest({personId,type,start,end,half,comment}){
   if(personId!==currentUser.id && !isAdmin()) return alert("Only an administrator can submit a request for someone else.");
   if(!TYPES[type]) return alert("Unknown type.");
@@ -753,7 +807,7 @@ async function createRequest({personId,type,start,end,half,comment}){
       r.start<=end && r.end>=start && (TYPES[r.type].absent===TYPES[type].absent));
   if(clash && !confirm(`Warning: overlaps with "${TYPES[clash.type].label} from ${fmtDate(clash.start)} to ${fmtDate(clash.end)}" (${STATUS[clash.status]}). Continue anyway?`)) return;
 
-  const auto = !TYPES[type].needsApproval || isAdmin();
+  const auto = !requestNeedsApproval(type,person,start,end) || isAdmin();
   const r = {
     id:uid(), personId, type, start, end, half:(start===end? half||null : null),
     comment:comment||"", status: auto?"approved":"pending",
@@ -786,6 +840,16 @@ async function removeRequest(id){
   render();
 }
 
+/* ---------- Remote-work quota ---------- */
+/* null = unlimited and untracked (no counter shown at all, e.g. Lisbon).
+   A number (possibly 0, e.g. Kuala Lumpur) is an enforced quota, extended
+   by the location's waiver bonus for a person with an approved exception. */
+function remoteQuotaFor(p){
+  const loc = locById(p.locationId);
+  if(!loc || loc.remoteQuota==null) return null;
+  return loc.remoteQuota + (p.remoteWaiver ? (loc.remoteWaiverBonus||0) : 0);
+}
+
 /* ---------- Balances & capacity ---------- */
 function balances(person, year){
   const rs = requests.filter(r=>r.personId===person.id);
@@ -794,13 +858,16 @@ function balances(person, year){
   const absentTypes = Object.keys(TYPES).filter(k=>TYPES[k].absent);
   const absApproved = sum(absentTypes,"approved");
   const open = [...Array(12)].reduce((s,_,m)=>s+personMonthOpen(person,year,m),0);
+  const remoteTaken = sum(["TT"],"approved");
+  const remoteQuota = remoteQuotaFor(person);
   return {
     cpTaken: sum(["CP"],"approved"),  cpPending: sum(["CP"],"pending"),
     rttTaken: sum(["RTT"],"approved"),rttPending: sum(["RTT"],"pending"),
     cpLeft: (person.cp||0) - sum(["CP"],"approved"),
     rttLeft: (person.rtt||0) - sum(["RTT"],"approved"),
-    sick: sum(["MAL"],"approved"), abs: sum(["ABS"],"approved"), tt: sum(["TT"],"approved"),
+    sick: sum(["MAL"],"approved"), abs: sum(["ABS"],"approved"), tt: remoteTaken,
     training: sum(["TRN"],"approved"),
+    remoteQuota, remoteLeft: remoteQuota==null ? null : remoteQuota - remoteTaken,
     pendingAll: sum(absentTypes,"pending"),
     absentAll: absApproved,
     openYear: open,
@@ -914,13 +981,15 @@ function viewMe(){
   const kpis = `
     <div class="kpi"><div class="v" style="color:var(--cp)">${b.cpLeft}</div><div class="l">Paid leave left ${y} (of ${currentUser.cp||0})</div></div>
     <div class="kpi"><div class="v" style="color:var(--rtt)">${b.rttLeft}</div><div class="l">RTT left ${y} (of ${currentUser.rtt||0})</div></div>
-    ${ext?`<div class="kpi"><div class="v" style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}">${b.projWorked}</div><div class="l">Projected worked days ${y} (target ${target})</div></div>`:""}
+    ${ext?`<div class="kpi"><div class="v" style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}">${b.projWorked}${b.pendingAll>0?` <span class="smooth-note" style="font-size:11px" title="${fmtDays(b.pendingAll)} pending day(s) not yet counted — only approved absences affect this figure">(−${fmtDays(b.pendingAll)} pending)</span>`:""}</div><div class="l">Projected worked days ${y} (target ${target})</div></div>`:""}
   `;
   return `
   <div class="kpis">
     ${kpis}
     <div class="kpi"><div class="v" style="color:#f59e0b">${b.pendingAll}</div><div class="l">Days awaiting approval</div></div>
-    <div class="kpi"><div class="v" style="color:var(--tt)">${b.tt}</div><div class="l">Remote work days ${y}</div></div>
+    ${b.remoteQuota==null
+      ? `<div class="kpi"><div class="v" style="color:var(--tt)">${b.tt}</div><div class="l">Remote work days ${y} (no cap)</div></div>`
+      : `<div class="kpi"><div class="v" style="color:${b.remoteLeft>=0?'var(--tt)':'var(--danger)'}">${b.remoteLeft}</div><div class="l">Remote days left ${y} (of ${b.remoteQuota})</div></div>`}
     <div class="kpi"><div class="v" style="color:var(--mal)">${b.sick+b.abs}</div><div class="l">Sick / unplanned ${y}</div></div>
   </div>
   <div class="row" style="margin-top:16px">
@@ -933,6 +1002,14 @@ function viewMe(){
       (unless submitted by an administrator, which is auto-approved). Remote work, sick leave, unplanned
       absence and training are recorded immediately. Days are counted against the public holidays of the
       selected person's location.</p>
+      ${(()=>{ const loc=locById(currentUser.locationId), team=teamById(currentUser.teamId);
+        if(loc?.enforceOnsiteDays && team?.onsiteDay!=null){
+          const dayName = WEEKDAY_OPTS.find(([v])=>v===String(team.onsiteDay))?.[1] || "";
+          return `<p class="muted">Note: ${esc(team.name)} is required on-site on <b>${dayName}</b> at ${esc(loc.name)} —
+          remote work requested for that day will need admin approval instead of being recorded immediately.</p>`;
+        }
+        return "";
+      })()}
     </div>
     <div class="card" style="flex:2">
       <h2>📋 My requests &amp; absences</h2>
@@ -1505,9 +1582,10 @@ function viewTeam(){
         <td><b>${b.cpLeft}</b> / ${p.cp||0}</td>
         <td><b>${b.rttLeft}</b> / ${p.rtt||0}</td>
         <td>${b.pendingAll||"—"}</td>
-        <td>${b.sick||"—"}</td><td>${b.abs||"—"}</td><td>${b.tt||"—"}</td>
+        <td>${b.sick||"—"}</td><td>${b.abs||"—"}</td>
+        <td>${b.remoteQuota==null ? (b.tt||"—") : `<b style="${b.remoteLeft<0?'color:var(--danger)':''}">${b.remoteLeft}</b> / ${b.remoteQuota}`}</td>
         <td>${target}</td>
-        <td style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}"><b>${b.projWorked}</b></td></tr>`);
+        <td style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}"><b>${b.projWorked}</b>${b.pendingAll>0?`<div class="pend-note" title="${fmtDays(b.pendingAll)} pending day(s) not yet counted — only approved absences affect this figure">(−${fmtDays(b.pendingAll)} pending)</div>`:""}</td></tr>`);
     }
   }
   return `
@@ -1549,7 +1627,7 @@ function viewSettings(){
     <h2>👤 People</h2>
     <div style="overflow-x:auto"><table>
       <tr><th>Name</th><th>Windows login</th><th>Profiles</th><th>Skill</th><th>Team</th><th>Location</th><th>Contract</th>
-          <th>Paid leave/yr</th><th>RTT/yr</th><th>Target d.</th><th>End date</th><th>Active</th><th></th></tr>
+          <th>Paid leave/yr</th><th>RTT/yr</th><th>Target d.</th><th>End date</th><th>Remote exc.</th><th>Active</th><th></th></tr>
       ${people.map(p=>`<tr>
         <td><input style="min-width:130px" data-pname="${p.id}" value="${esc(p.name)}"></td>
         <td><input style="min-width:90px" data-plogin="${p.id}" value="${esc(p.winLogin||"")}" placeholder="login"></td>
@@ -1565,6 +1643,7 @@ function viewSettings(){
         <td><input type="number" step="0.5" min="0" style="width:65px" data-prtt="${p.id}" value="${p.rtt||0}"></td>
         <td><input type="number" step="1" min="0" style="width:65px" data-ptarget="${p.id}" value="${contractTarget(p)}"></td>
         <td><input type="date" style="min-width:135px" data-pend="${p.id}" value="${p.endDate||""}"></td>
+        <td style="text-align:center"><input type="checkbox" data-premote="${p.id}" ${p.remoteWaiver?"checked":""} title="Approved remote-work exception (+bonus days at locations that grant one)"></td>
         <td style="text-align:center"><input type="checkbox" data-pactive="${p.id}" ${p.active!==false?"checked":""}></td>
         <td>${p.id!==currentUser.id?`<button class="btn small danger" data-pdel="${p.id}" title="Delete">✕</button>`:""}</td>
       </tr>`).join("")}
@@ -1581,8 +1660,9 @@ function viewSettings(){
     plan and the Projects tab. <b>Skill</b> (free text, e.g. Data engineering, Support, BA…) is used to
     target projects and to filter the capacity plan. <b>End date</b> is the date a person leaves the team —
     from that date their capacity contribution drops to zero (calendar, capacity plan, projects) without
-    needing to deactivate them; leave it blank if not applicable. Windows login enables automatic sign-in via
-    <b>Lancer.cmd</b> (case-insensitive).
+    needing to deactivate them; leave it blank if not applicable. <b>Remote exc.</b> grants the location's
+    remote-work waiver bonus (e.g. +20 days at Paris) once approved by an admin. Windows login enables
+    automatic sign-in via <b>Lancer.cmd</b> (case-insensitive).
     Target d. = expected worked days for the year (default: internal ${CONTRACTS.interne.target}, external ${CONTRACTS.externe.target}).
     "Deactivate" (uncheck Active) hides the person without losing their history.</p>
   </div>
@@ -1591,11 +1671,12 @@ function viewSettings(){
     <div class="card">
       <h2>🏢 Teams</h2>
       <table>
-        <tr><th>Name</th><th>Trigram</th><th></th><th></th></tr>
+        <tr><th>Name</th><th>Trigram</th><th>On-site day</th><th></th><th></th></tr>
         ${config.teams.map(t=>{
           const n = activePeople().filter(p=>p.teamId===t.id).length;
           return `<tr><td><input data-tname="${t.id}" value="${esc(t.name)}"></td>
             <td><input data-ttrigram="${t.id}" value="${esc(t.trigram||"")}" maxlength="4" style="width:70px; text-transform:uppercase"></td>
+            <td><select data-tonsite="${t.id}">${WEEKDAY_OPTS.map(([v,l])=>`<option value="${v}" ${String(t.onsiteDay??"")===String(v)?"selected":""}>${l}</option>`).join("")}</select></td>
             <td class="muted">${n} member(s)</td>
             <td>${config.teams.length>1 && n===0 ? `<button class="btn small danger" data-tdel="${t.id}">✕</button>`:""}</td></tr>`;
         }).join("")}
@@ -1609,7 +1690,9 @@ function viewSettings(){
       <p class="muted" style="margin-top:8px">The trigram is shown before each person's first name wherever
       people are listed
       (e.g. "${esc(config.teams[0]?.trigram||"ABC")}-${esc((activePeople().find(p=>p.teamId===config.teams[0]?.id)||{name:"FirstName"}).name)}").
-      A team can only be deleted once it has no active members left.</p>
+      <b>On-site day</b>: the team's mandatory in-office weekday. It's only enforced at locations with
+      "Enforce on-site days" checked (see Locations) — remote-work requests on that day then require admin
+      approval instead of being auto-recorded. A team can only be deleted once it has no active members left.</p>
     </div>
 
     <div class="card">
@@ -1618,6 +1701,19 @@ function viewSettings(){
         <select id="loc-select" style="max-width:220px">${locOptions(settingsLoc)}</select>
         <span class="muted">${config.locations.map(l=>esc(l.name)).join(" · ")}</span>
       </div>
+      <div class="actions" style="margin-bottom:10px">
+        <label style="display:inline; margin:0">Remote quota/yr</label>
+        <input id="loc-remote-quota" type="number" min="0" step="1" placeholder="blank = unlimited, untracked"
+          value="${loc.remoteQuota==null?"":loc.remoteQuota}" style="max-width:110px">
+        <label style="display:inline; margin:0">Waiver bonus</label>
+        <input id="loc-remote-bonus" type="number" min="0" step="1" value="${loc.remoteWaiverBonus||0}" style="max-width:90px">
+        <label style="display:inline; margin:0"><input type="checkbox" id="loc-onsite-enforce" ${loc.enforceOnsiteDays?"checked":""}> Enforce on-site days</label>
+        <button class="btn small ok" id="btn-save-loc-policy">💾 Save</button>
+      </div>
+      <p class="muted" style="margin-top:-4px; margin-bottom:10px">Remote quota: yearly cap on remote-work
+      days for people at this location; leave blank for unlimited and untracked (no counter shown at all).
+      Waiver bonus: extra days added on top of the quota for a person with "Remote exc." checked (Settings →
+      People). "Enforce on-site days" turns on the teams' mandatory in-office weekday for people here.</p>
       <div class="actions" style="margin-bottom:10px">
         <input id="loc-year" type="number" value="${y+1}" style="max-width:100px">
         <button class="btn small" id="btn-gen-holidays" ${loc.gen && loc.gen!=="NONE"?"":"disabled"}>Generate ${esc(gen.label)} holidays</button>
@@ -1873,7 +1969,7 @@ function bindAfterRender(){
     config.people.push({id:uid(), name, winLogin:q("np-login").value.trim(), roles:[],
       teamId:config.teams[0].id, locationId:config.locations[0].id,
       contract:"interne", target:CONTRACTS.interne.target, cp:CONTRACTS.interne.cp, rtt:CONTRACTS.interne.rtt,
-      endDate:"", active:true});
+      endDate:"", remoteWaiver:false, active:true});
     await store.saveConfig(config); toast("Member added ✓ — adjust their team/location/contract then Save"); render();
   };
   // switching contract type pre-fills the target and CP/RTT if they were at the other default
@@ -1907,6 +2003,7 @@ function bindAfterRender(){
       if(g("prtt")) p.rtt = parseFloat(g("prtt").value)||0;
       if(g("ptarget")) p.target = parseInt(g("ptarget").value)||CONTRACTS[p.contract].target;
       if(g("pend")) p.endDate = g("pend").value||"";
+      if(g("premote")) p.remoteWaiver = g("premote").checked;
       if(g("pactive")) p.active = g("pactive").checked;
     }
     if(!config.people.some(p=>(p.roles||[]).includes("admin") && p.active!==false))
@@ -1941,6 +2038,8 @@ function bindAfterRender(){
       if(el && el.value.trim()) t.name = el.value.trim();
       const tel = document.querySelector(`[data-ttrigram="${t.id}"]`);
       if(tel && tel.value.trim()) t.trigram = tel.value.trim().toUpperCase().slice(0,4);
+      const oel = document.querySelector(`[data-tonsite="${t.id}"]`);
+      if(oel) t.onsiteDay = oel.value===""?null:parseInt(oel.value);
     }
     await store.saveConfig(config); toast("Teams saved ✓"); render();
   };
@@ -1954,6 +2053,14 @@ function bindAfterRender(){
 
   /* Settings: locations & public holidays */
   if(q("loc-select")) q("loc-select").onchange = e=>{ settingsLoc=e.target.value; render(); };
+  if(q("btn-save-loc-policy")) q("btn-save-loc-policy").onclick = async ()=>{
+    const loc = locById(settingsLoc); if(!loc) return;
+    const qv = q("loc-remote-quota").value.trim();
+    loc.remoteQuota = qv===""?null:Math.max(0, parseInt(qv)||0);
+    loc.remoteWaiverBonus = Math.max(0, parseInt(q("loc-remote-bonus").value)||0);
+    loc.enforceOnsiteDays = q("loc-onsite-enforce").checked;
+    await store.saveConfig(config); toast("Location policy saved ✓"); render();
+  };
   if(q("btn-gen-holidays")) q("btn-gen-holidays").onclick = async ()=>{
     const y = parseInt(q("loc-year").value);
     if(!y || y<2000 || y>2100) return alert("Invalid year.");
@@ -1980,7 +2087,8 @@ function bindAfterRender(){
     if(!name) return;
     const genKey = q("nl-gen").value;
     const id = "l-"+uid();
-    config.locations.push({id, name, gen:genKey});
+    const pol = DEFAULT_REMOTE_POLICY[name] || {remoteQuota:null, remoteWaiverBonus:0, enforceOnsiteDays:false};
+    config.locations.push({id, name, gen:genKey, ...pol});
     const y = new Date().getFullYear();
     for(const h of [...HOLGENS[genKey].gen(y), ...HOLGENS[genKey].gen(y+1)])
       config.holidays.push({...h, locationId:id});
