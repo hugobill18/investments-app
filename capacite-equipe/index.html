@@ -119,9 +119,11 @@
 <div class="overlay hidden" id="ov-setup">
   <div class="box">
     <h2>Première utilisation — configuration</h2>
-    <p>Ce dossier ne contient pas encore de données. Créez le premier compte
-       (il sera <b>administrateur</b>). Une équipe par défaut et le lieu « Paris »
-       (fériés français générés) seront créés — le tout modifiable ensuite dans Paramètres.</p>
+    <p>Ce dossier ne contient pas encore de données. L'<b>organisation de base</b>
+       (équipes, personnes, lieux Paris / Lisbonne / Kuala Lumpur / Tunis avec leurs
+       fériés) sera créée automatiquement — le tout modifiable ensuite dans Paramètres.
+       Saisissez votre nom : vous serez <b>administrateur</b> (si le nom correspond à
+       une personne de l'organisation, elle est reconnue).</p>
     <label>Votre nom complet</label>
     <input id="setup-name" placeholder="ex : Marie Dupont">
     <label>Votre login Windows (pour la connexion automatique via Lancer.cmd)</label>
@@ -248,6 +250,16 @@ function holLU(y){ const e=easterSunday(y); return [
   {date:`${y}-12-25`,label:"Noël"},
   {date:`${y}-12-26`,label:"Saint-Étienne"},
 ];}
+function holTN(y){ return [ // fêtes civiles fixes de Tunisie
+  {date:`${y}-01-01`,label:"Jour de l'an"},
+  {date:`${y}-03-20`,label:"Fête de l'Indépendance"},
+  {date:`${y}-04-09`,label:"Journée des Martyrs"},
+  {date:`${y}-05-01`,label:"Fête du Travail"},
+  {date:`${y}-07-25`,label:"Fête de la République"},
+  {date:`${y}-08-13`,label:"Fête de la Femme"},
+  {date:`${y}-10-15`,label:"Fête de l'Évacuation"},
+  {date:`${y}-12-17`,label:"Fête de la Révolution"},
+];}
 function holQC(y){ const e=easterSunday(y); return [
   {date:`${y}-01-01`,label:"Jour de l'an"},
   {date:iso(addDays(e,-2)),label:"Vendredi saint"},
@@ -263,11 +275,58 @@ const HOLGENS = {
   PT:{label:"Portugal (Lisbonne)", gen:holPT},
   MY:{label:"Malaisie (Kuala Lumpur)", gen:holMY,
       note:"⚠ Seuls les fériés à date fixe sont générés. Ajoutez chaque année manuellement : Nouvel An chinois (2 j), Thaipusam, Hari Raya Aidilfitri (2 j), Wesak, Hari Raya Haji, Awal Muharram, Maulidur Rasul, Deepavali."},
+  TN:{label:"Tunisie (Tunis)", gen:holTN,
+      note:"⚠ Seules les fêtes civiles à date fixe sont générées. Ajoutez chaque année manuellement les fêtes religieuses : Aïd el-Fitr (2 j), Aïd el-Idha (2 j), Ras el Am hégirien, Mouled."},
   LU:{label:"Luxembourg", gen:holLU},
   CA_QC:{label:"Canada — Québec (Montréal)", gen:holQC,
       note:"Le Vendredi saint est généré ; certains employeurs chôment le lundi de Pâques à la place — ajustez si besoin."},
   NONE:{label:"Autre (saisie manuelle)", gen:()=>[]},
 };
+
+/* ---------- Organisation de base (créée au premier lancement, modifiable ensuite) ----------
+   Format membre : [nom, contrat, lieu, rôle facultatif] */
+const DEFAULT_LOCS = [["Paris","FR"],["Lisbonne","PT"],["Kuala Lumpur","MY"],["Tunis","TN"]];
+const DEFAULT_ORG = [
+  {team:"Stability of production", members:[
+    ["Mohamed Ali","externe","Paris"], ["Samya","externe","Paris"],
+    ["Sambit","externe","Kuala Lumpur"], ["Vijay Kumar","externe","Kuala Lumpur"]]},
+  {team:"Master Datahub Pricing", members:[
+    ["Landry","interne","Paris"], ["Farid","externe","Tunis"],
+    ["Chaima","externe","Tunis"], ["Laurent","externe","Paris"]]},
+  {team:"Master Datahub Atlas", members:[
+    ["Ali","externe","Paris"], ["Soumaya","externe","Tunis"]]},
+  {team:"Casa Datahub", members:[
+    ["Saleh","externe","Paris"], ["Olivier","externe","Paris"], ["Béraud","externe","Paris"],
+    ["Sarra","externe","Paris"], ["Samuel","externe","Paris"]]},
+  {team:"3MS & Pricing project", members:[
+    ["Saloua","externe","Paris"], ["Souha","externe","Paris"], ["Mustapha","externe","Paris"],
+    ["Abibatou","externe","Paris"], ["Nabila","externe","Paris"],
+    ["Marcin","interne","Kuala Lumpur"], ["Radha","externe","Kuala Lumpur"],
+    ["Ghaith","externe","Lisbonne"]]},
+  {team:"Transversal", members:[
+    ["Jerome","interne","Paris"], ["Walid","interne","Paris"], ["Youssef","interne","Paris"],
+    ["Firas","interne","Paris"], ["Jeremy","interne","Paris","admin"]]},
+];
+function buildDefaultConfig(){
+  const y = new Date().getFullYear();
+  const locations = DEFAULT_LOCS.map(([name,gen],i)=>({id:"l"+i+"-"+uid(), name, gen}));
+  const locByName = Object.fromEntries(locations.map(l=>[l.name,l.id]));
+  const holidays = [];
+  for(const l of locations) for(const yy of [y,y+1])
+    for(const h of HOLGENS[l.gen].gen(yy)) holidays.push({...h, locationId:l.id});
+  const teams=[], people=[];
+  DEFAULT_ORG.forEach((def,ti)=>{
+    const t = {id:"t"+ti+"-"+uid(), name:def.team};
+    teams.push(t);
+    for(const [name,contract,locName,role] of def.members){
+      people.push({id:uid()+Math.random().toString(36).slice(2,5), name, winLogin:"",
+        role:role||"user", teamId:t.id, locationId:locByName[locName], contract,
+        target:CONTRACTS[contract].target,
+        cp:contract==="interne"?25:0, rtt:contract==="interne"?10:0, active:true});
+    }
+  });
+  return {version:2, teams, locations, people, holidays};
+}
 
 /* ---------- État global ---------- */
 let config = null;
@@ -472,16 +531,21 @@ function showSetup(){
     const winLogin = document.getElementById("setup-login").value.trim();
     const cp  = parseFloat(document.getElementById("setup-cp").value)||0;
     const rtt = parseFloat(document.getElementById("setup-rtt").value)||0;
-    const y = new Date().getFullYear();
-    const teamId = "t-"+uid(), locId = "l-"+uid();
-    config = {
-      version:2,
-      teams:[{id:teamId, name:"Équipe 1"}],
-      locations:[{id:locId, name:"Paris", gen:"FR"}],
-      people:[{id:uid(), name, winLogin, role:"admin", teamId, locationId:locId,
-               contract:"interne", target:CONTRACTS.interne.target, cp, rtt, active:true}],
-      holidays:[...holFR(y), ...holFR(y+1)].map(h=>({...h, locationId:locId})),
-    };
+    config = buildDefaultConfig();
+    // rattacher l'admin à la personne correspondante de l'organisation de base
+    const norm = s=>s.trim().toLowerCase();
+    let me = config.people.find(p=>norm(p.name)===norm(name))
+          || config.people.find(p=>norm(p.name).startsWith(norm(name)) || norm(name).startsWith(norm(p.name)));
+    if(me){
+      me.role = "admin"; me.winLogin = winLogin;
+      if(me.contract==="interne"){ me.cp = cp; me.rtt = rtt; }
+    }else{
+      me = {id:uid(), name, winLogin, role:"admin",
+        teamId:config.teams[config.teams.length-1].id, locationId:config.locations[0].id,
+        contract:"interne", target:CONTRACTS.interne.target, cp, rtt, active:true};
+      config.people.push(me);
+    }
+    localStorage.setItem("tc_user", me.id);
     try{ await store.saveConfig(config); }
     catch(e){ return setupErr("Impossible d'écrire dans le dossier : "+e.message); }
     requests = [];

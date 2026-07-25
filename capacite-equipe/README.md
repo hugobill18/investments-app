@@ -30,16 +30,17 @@ sur chaque poste.
 3. Double-cliquez sur `Lancer.cmd` (ou sur `index.html`).
 4. Cliquez sur **« Choisir le dossier de données »**, sélectionnez `donnees/`
    et autorisez l'accès en lecture/écriture quand Edge le demande.
-5. L'assistant crée votre compte **administrateur** (votre login Windows est
-   pré-rempli), une équipe par défaut et le lieu « Paris » avec les fériés
-   français de l'année en cours et de la suivante.
-6. Dans **Paramètres** :
-   - créez vos **équipes** ;
-   - créez vos **lieux** (Lisbonne, Kuala Lumpur… — générateurs de fériés
-     fournis pour France, Portugal, Malaisie, Luxembourg, Québec/Montréal) ;
-   - ajoutez les **personnes** et renseignez pour chacune : login Windows,
-     rôle, équipe, lieu, contrat interne/externe, droits CP/RTT, cible de
-     jours travaillés.
+5. L'assistant crée l'**organisation de base** définie dans `index.html`
+   (constante `DEFAULT_ORG`) : les équipes Stability of production, Master
+   Datahub Pricing, Master Datahub Atlas, Casa Datahub, 3MS & Pricing project
+   et Transversal, leurs membres avec contrat et lieu, et les lieux
+   Paris / Lisbonne / Kuala Lumpur / Tunis avec leurs fériés sur deux ans.
+   Saisissez votre nom : s'il correspond à une personne de l'organisation,
+   elle devient votre compte **administrateur** (login Windows pré-rempli).
+6. Dans **Paramètres**, ajustez si besoin : logins Windows des membres (pour
+   leur connexion automatique), rôles, équipes, lieux supplémentaires
+   (générateurs fournis : France, Portugal, Malaisie, Tunisie, Luxembourg,
+   Québec/Montréal), droits CP/RTT, cibles de jours travaillés.
 
 ## 2. Connexion automatique par login Windows
 
@@ -86,13 +87,18 @@ Les **administrateurs** ont en plus :
   validées ; elle passe en rouge sous la cible. La cible est modifiable par
   personne.
 
-### Jours fériés — cas particulier de Kuala Lumpur
+### Jours fériés — cas de Kuala Lumpur et Tunis
 
-Le générateur Malaisie ne produit que les fériés **à date fixe** (les fêtes
-mobiles — Nouvel An chinois, Thaipusam, Hari Raya Aidilfitri, Wesak, Hari
-Raya Haji, Awal Muharram, Maulidur Rasul, Deepavali — dépendent de calendriers
-lunaires et d'annonces officielles). Ajoutez-les manuellement chaque année
-dans Paramètres → Lieux & jours fériés (l'application le rappelle à l'écran).
+Les générateurs Malaisie et Tunisie ne produisent que les fériés **à date
+fixe**. Les fêtes mobiles dépendent de calendriers lunaires et d'annonces
+officielles et sont à ajouter manuellement chaque année dans
+Paramètres → Lieux & jours fériés (l'application le rappelle à l'écran) :
+- **Kuala Lumpur** : Nouvel An chinois (2 j), Thaipusam, Hari Raya
+  Aidilfitri (2 j), Wesak, Hari Raya Haji, Awal Muharram, Maulidur Rasul,
+  Deepavali ;
+- **Tunis** : Aïd el-Fitr (2 j), Aïd el-Idha (2 j), Ras el Am hégirien,
+  Mouled.
+
 Pour le Québec, le Vendredi saint est généré ; certains employeurs chôment
 le lundi de Pâques à la place — ajustez si besoin.
 
@@ -134,7 +140,7 @@ conserve aussi un historique de versions des fichiers).
 - **Navigateur requis** : Edge ou Chrome (l'API *File System Access* n'existe
   pas dans Firefox). Edge est présent sur tous les Windows récents.
 - Le décompte suppose un week-end samedi/dimanche (vrai pour Paris, Lisbonne,
-  Kuala Lumpur, Luxembourg et Montréal).
+  Kuala Lumpur, Tunis, Luxembourg et Montréal).
 
 ## 6. Si un jour vous avez accès à Microsoft 365 « complet »
 
