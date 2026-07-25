@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capacité Équipe — Congés & Absences</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --border:#dfe4ea; --text:#1f2937; --muted:#6b7280;
+    --primary:#2563eb; --primary-dark:#1d4ed8; --danger:#dc2626; --ok:#059669;
+    --cp:#2563eb; --rtt:#7c3aed; --tt:#059669; --mal:#d97706; --abs:#dc2626; --ss:#6b7280;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:"Segoe UI",system-ui,Arial,sans-serif; background:var(--bg); color:var(--text); font-size:14px;}
+  header{background:#111827; color:#fff; padding:10px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+  header h1{font-size:17px; font-weight:600;}
+  header .spacer{flex:1;}
+  header .who{font-size:13px; color:#d1d5db;}
+  header .who b{color:#fff;}
+  .badge{display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600;}
+  .badge.admin{background:#f59e0b; color:#111;}
+  .badge.user{background:#374151; color:#e5e7eb;}
+  nav{background:#fff; border-bottom:1px solid var(--border); padding:0 20px; display:flex; gap:4px; flex-wrap:wrap;}
+  nav button{border:none; background:none; padding:12px 14px; font-size:14px; cursor:pointer; color:var(--muted); border-bottom:3px solid transparent;}
+  nav button.active{color:var(--primary); border-bottom-color:var(--primary); font-weight:600;}
+  nav button:hover{color:var(--primary);}
+  main{padding:20px; max-width:1300px; margin:0 auto;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:16px;}
+  .card h2{font-size:15px; margin-bottom:12px;}
+  .card h3{font-size:13px; margin:14px 0 8px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;}
+  .row{display:flex; gap:16px; flex-wrap:wrap;}
+  .row > .card{flex:1; min-width:280px;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{padding:7px 8px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle;}
+  th{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px;}
+  tr:hover td{background:#f9fafb;}
+  label{display:block; font-size:12px; color:var(--muted); margin:8px 0 3px;}
+  input,select,textarea{width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:6px; font-size:14px; font-family:inherit; background:#fff;}
+  input:focus,select:focus,textarea:focus{outline:2px solid #bfdbfe; border-color:var(--primary);}
+  input[type=checkbox]{width:auto;}
+  button.btn{background:var(--primary); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:500;}
+  button.btn:hover{background:var(--primary-dark);}
+  button.btn.secondary{background:#e5e7eb; color:var(--text);}
+  button.btn.secondary:hover{background:#d1d5db;}
+  button.btn.danger{background:var(--danger);}
+  button.btn.ok{background:var(--ok);}
+  button.btn.small{padding:4px 10px; font-size:12px;}
+  .pill{display:inline-block; padding:2px 9px; border-radius:12px; font-size:12px; font-weight:600; color:#fff;}
+  .st-pending{background:#f59e0b; color:#111;}
+  .st-approved{background:var(--ok);}
+  .st-rejected{background:var(--danger);}
+  .kpis{display:flex; gap:12px; flex-wrap:wrap;}
+  .kpi{flex:1; min-width:130px; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center;}
+  .kpi .v{font-size:26px; font-weight:700;}
+  .kpi .l{font-size:12px; color:var(--muted); margin-top:2px;}
+  /* Calendrier */
+  .calwrap{overflow-x:auto;}
+  table.cal{border:1px solid var(--border);}
+  table.cal th, table.cal td{border:1px solid var(--border); text-align:center; padding:3px 2px; min-width:26px; font-size:11px;}
+  table.cal th.person, table.cal td.person{text-align:left; min-width:140px; padding-left:8px; font-weight:600; font-size:12px; position:sticky; left:0; background:#fff; z-index:1;}
+  table.cal td.we{background:#eef1f5; color:#b0b7c3;}
+  table.cal td.hol{background:#fde68a;}
+  table.cal td.absent{color:#fff; font-weight:700;}
+  table.cal td.pending-cell{opacity:.55; font-weight:700;}
+  table.cal tr.caprow td{background:#f3f4f6; font-weight:700;}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--muted);}
+  .legend .sw{display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:4px;}
+  /* Overlay connexion */
+  .overlay{position:fixed; inset:0; background:rgba(17,24,39,.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px;}
+  .overlay .box{background:#fff; border-radius:10px; padding:28px; max-width:520px; width:100%; max-height:92vh; overflow:auto;}
+  .overlay .box h2{margin-bottom:8px; font-size:18px;}
+  .overlay .box p{color:var(--muted); font-size:13px; margin-bottom:14px; line-height:1.5;}
+  .notice{background:#fef3c7; border:1px solid #fcd34d; border-radius:6px; padding:9px 12px; font-size:13px; margin-bottom:12px;}
+  .notice.err{background:#fee2e2; border-color:#fca5a5;}
+  .notice.info{background:#dbeafe; border-color:#93c5fd;}
+  .hidden{display:none !important;}
+  .muted{color:var(--muted); font-size:12px;}
+  .toast{position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:10px 18px; border-radius:8px; font-size:13px; z-index:60; box-shadow:0 4px 14px rgba(0,0,0,.25);}
+  .actions{display:flex; gap:6px; flex-wrap:wrap;}
+  .formgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:0 14px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📅 Capacité Équipe</h1>
+  <span id="mode-indicator" class="muted"></span>
+  <div class="spacer"></div>
+  <span class="who" id="who"></span>
+  <button class="btn small secondary" id="btn-refresh" title="Recharger les données depuis le dossier partagé">⟳ Rafraîchir</button>
+  <button class="btn small secondary" id="btn-switch-user">Changer d'utilisateur</button>
+</header>
+
+<nav id="tabs"></nav>
+<main id="main"></main>
+
+<!-- ============ Overlays ============ -->
+<div class="overlay" id="ov-connect">
+  <div class="box">
+    <h2>Bienvenue 👋</h2>
+    <p>Cette application gère les congés, télétravail et absences de l'équipe.
+       Les données sont stockées dans un <b>dossier partagé</b> (par exemple un dossier
+       OneDrive/SharePoint synchronisé sur votre PC). Choisissez ce dossier pour commencer.</p>
+    <div id="connect-fs">
+      <button class="btn" id="btn-pick-folder">📂 Choisir le dossier de données</button>
+      <p class="muted" style="margin-top:10px">Astuce : sélectionnez le dossier OneDrive partagé par votre responsable
+      (ex. <i>Documents partagés &gt; Capacité Équipe &gt; donnees</i>). Le navigateur vous demandera
+      l'autorisation de lecture/écriture : cliquez sur « Autoriser ».</p>
+    </div>
+    <div id="connect-unsupported" class="hidden">
+      <div class="notice err">Votre navigateur ne permet pas l'accès aux dossiers locaux
+      (API File System Access absente). Utilisez <b>Microsoft Edge</b> ou <b>Google Chrome</b>.</div>
+      <button class="btn secondary" id="btn-demo">Continuer en mode démo (données locales à ce PC uniquement)</button>
+    </div>
+    <div id="connect-error" class="notice err hidden"></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="ov-setup">
+  <div class="box">
+    <h2>Première utilisation — configuration</h2>
+    <p>Ce dossier ne contient pas encore de données. Créez le premier compte
+       (il sera <b>administrateur</b>) et les jours fériés seront générés automatiquement.</p>
+    <label>Votre nom complet</label>
+    <input id="setup-name" placeholder="ex : Marie Dupont">
+    <div class="formgrid">
+      <div><label>Congés payés / an (jours)</label><input id="setup-cp" type="number" value="25" min="0" step="0.5"></div>
+      <div><label>RTT / an (jours)</label><input id="setup-rtt" type="number" value="10" min="0" step="0.5"></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn" id="btn-setup-ok">Créer et démarrer</button></div>
+    <div id="setup-error" class="notice err hidden" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="ov-login">
+  <div class="box">
+    <h2>Qui êtes-vous ?</h2>
+    <p>Sélectionnez votre nom. <span class="muted">(Identification déclarative — voir la note
+       de l'administrateur sur les limites de confidentialité.)</span></p>
+    <select id="login-select"></select>
+    <div style="margin-top:16px"><button class="btn" id="btn-login">Entrer</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Capacité Équipe — application monofichier, sans serveur.
+   Données : un dossier partagé (OneDrive synchronisé) contenant
+     config.json            -> personnes, rôles, soldes annuels, jours fériés
+     requests/req_*.json    -> une demande/absence par fichier (limite les
+                               conflits de synchronisation OneDrive)
+   ===================================================================== */
+
+/* ---------- Types d'absence ---------- */
+const TYPES = {
+  CP:  {label:"Congé payé",       color:"var(--cp)",  hex:"#2563eb", needsApproval:true,  deducts:"cp",  absent:true},
+  RTT: {label:"RTT",              color:"var(--rtt)", hex:"#7c3aed", needsApproval:true,  deducts:"rtt", absent:true},
+  TT:  {label:"Télétravail",      color:"var(--tt)",  hex:"#059669", needsApproval:false, deducts:null,  absent:false},
+  MAL: {label:"Arrêt maladie",    color:"var(--mal)", hex:"#d97706", needsApproval:false, deducts:null,  absent:true},
+  ABS: {label:"Absence imprévue", color:"var(--abs)", hex:"#dc2626", needsApproval:false, deducts:null,  absent:true},
+  SS:  {label:"Congé sans solde", color:"var(--ss)",  hex:"#6b7280", needsApproval:true,  deducts:null,  absent:true},
+};
+const STATUS = {pending:"En attente", approved:"Validé", rejected:"Refusé"};
+
+/* ---------- Utilitaires dates ---------- */
+const pad = n => String(n).padStart(2,"0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const fromIso = s => { const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); };
+const fmtFr = s => { const d=fromIso(s); return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}); };
+const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+const isWeekend = d => d.getDay()===0 || d.getDay()===6;
+const todayIso = () => iso(new Date());
+
+function easterSunday(y){ // algorithme de Butcher
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),
+        g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,
+        l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+        mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+  return new Date(y,mo-1,da);
+}
+function frenchHolidays(y){
+  const e = easterSunday(y);
+  return [
+    {date:`${y}-01-01`, label:"Jour de l'an"},
+    {date:iso(addDays(e,1)),  label:"Lundi de Pâques"},
+    {date:`${y}-05-01`, label:"Fête du Travail"},
+    {date:`${y}-05-08`, label:"Victoire 1945"},
+    {date:iso(addDays(e,39)), label:"Ascension"},
+    {date:iso(addDays(e,50)), label:"Lundi de Pentecôte"},
+    {date:`${y}-07-14`, label:"Fête nationale"},
+    {date:`${y}-08-15`, label:"Assomption"},
+    {date:`${y}-11-01`, label:"Toussaint"},
+    {date:`${y}-11-11`, label:"Armistice 1918"},
+    {date:`${y}-12-25`, label:"Noël"},
+  ];
+}
+
+/* ---------- État global ---------- */
+let config = null;          // {people:[], holidays:[]}
+let requests = [];          // liste des demandes
+let currentUser = null;     // personne connectée
+let currentTab = "me";
+let calYear, calMonth;      // calendrier affiché
+const now = new Date();
+calYear = now.getFullYear(); calMonth = now.getMonth();
+
+const holidaySet = () => new Set((config?.holidays||[]).map(h=>h.date));
+const holidayLabel = s => (config?.holidays||[]).find(h=>h.date===s)?.label;
+const personById = id => (config?.people||[]).find(p=>p.id===id);
+const isAdmin = () => currentUser?.role === "admin";
+const uid = () => Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
+
+/* ---------- Décompte de jours ouvrés ---------- */
+function openDays(startIso, endIso, half){
+  const hs = holidaySet();
+  let n=0;
+  for(let d=fromIso(startIso); iso(d)<=endIso; d=addDays(d,1)){
+    if(!isWeekend(d) && !hs.has(iso(d))) n++;
+  }
+  if(half && startIso===endIso && n>0) n = 0.5;
+  return n;
+}
+// portion d'une demande qui tombe dans l'année y
+function openDaysInYear(r, y){
+  const a = r.start < `${y}-01-01` ? `${y}-01-01` : r.start;
+  const b = r.end   > `${y}-12-31` ? `${y}-12-31` : r.end;
+  if(a>b) return 0;
+  if(a===r.start && b===r.end) return openDays(r.start,r.end,r.half);
+  return openDays(a,b,null);
+}
+
+/* =====================================================================
+   Couche de stockage : dossier partagé (File System Access) ou démo
+   ===================================================================== */
+const store = {
+  mode: null,       // "fs" | "demo"
+  dir: null,        // FileSystemDirectoryHandle
+
+  async connectFolder(handle){
+    this.dir = handle; this.mode = "fs";
+    await idbSet("dirHandle", handle);
+  },
+  async readJson(name, dirH){
+    try{
+      const fh = await (dirH||this.dir).getFileHandle(name);
+      const f = await fh.getFile();
+      const t = await f.text();
+      return t.trim() ? JSON.parse(t) : null;
+    }catch(e){ return null; }
+  },
+  async writeJson(name, obj, dirH){
+    const fh = await (dirH||this.dir).getFileHandle(name,{create:true});
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(obj,null,2));
+    await w.close();
+  },
+  async loadConfig(){
+    if(this.mode==="demo") return JSON.parse(localStorage.getItem("tc_config")||"null");
+    return await this.readJson("config.json");
+  },
+  async saveConfig(cfg){
+    if(this.mode==="demo"){ localStorage.setItem("tc_config",JSON.stringify(cfg)); return; }
+    await this.writeJson("config.json", cfg);
+  },
+  async requestsDir(create){
+    return await this.dir.getDirectoryHandle("requests",{create:!!create});
+  },
+  async loadRequests(){
+    if(this.mode==="demo") return JSON.parse(localStorage.getItem("tc_requests")||"[]");
+    const out=[];
+    let rd; try{ rd = await this.requestsDir(false); }catch(e){ return out; }
+    for await (const [name,h] of rd.entries()){
+      if(h.kind==="file" && name.endsWith(".json")){
+        const r = await this.readJson(name, rd);
+        if(r && r.id) out.push(r);
+      }
+    }
+    return out;
+  },
+  async saveRequest(r){
+    if(this.mode==="demo"){
+      const all = JSON.parse(localStorage.getItem("tc_requests")||"[]").filter(x=>x.id!==r.id);
+      all.push(r); localStorage.setItem("tc_requests",JSON.stringify(all)); return;
+    }
+    const rd = await this.requestsDir(true);
+    await this.writeJson(`req_${r.id}.json`, r, rd);
+  },
+  async deleteRequest(id){
+    if(this.mode==="demo"){
+      const all = JSON.parse(localStorage.getItem("tc_requests")||"[]").filter(x=>x.id!==id);
+      localStorage.setItem("tc_requests",JSON.stringify(all)); return;
+    }
+    const rd = await this.requestsDir(true);
+    try{ await rd.removeEntry(`req_${id}.json`); }catch(e){}
+  },
+};
+
+/* IndexedDB minimal pour mémoriser le dossier choisi entre deux lancements */
+function idbOpen(){ return new Promise((res,rej)=>{
+  const rq = indexedDB.open("capacite-equipe",1);
+  rq.onupgradeneeded = ()=>rq.result.createObjectStore("kv");
+  rq.onsuccess = ()=>res(rq.result); rq.onerror = ()=>rej(rq.error);
+});}
+async function idbSet(k,v){ const db=await idbOpen(); return new Promise((res,rej)=>{
+  const tx=db.transaction("kv","readwrite"); tx.objectStore("kv").put(v,k);
+  tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+});}
+async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)=>{
+  const rq=db.transaction("kv").objectStore("kv").get(k);
+  rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error);
+});}
+
+/* =====================================================================
+   Démarrage
+   ===================================================================== */
+async function boot(){
+  document.getElementById("btn-refresh").onclick = ()=>reloadData(true);
+  document.getElementById("btn-switch-user").onclick = ()=>{ localStorage.removeItem("tc_user"); showLogin(); };
+  window.addEventListener("focus", ()=>{ if(store.mode==="fs" && config) reloadData(false); });
+
+  if(!window.showDirectoryPicker){
+    document.getElementById("connect-fs").classList.add("hidden");
+    document.getElementById("connect-unsupported").classList.remove("hidden");
+    document.getElementById("btn-demo").onclick = async ()=>{ store.mode="demo"; await afterConnect(); };
+  }else{
+    document.getElementById("btn-pick-folder").onclick = pickFolder;
+    // tentative de reconnexion silencieuse au dossier mémorisé
+    try{
+      const h = await idbGet("dirHandle");
+      if(h){
+        const p = await h.queryPermission({mode:"readwrite"});
+        if(p==="granted"){ store.dir=h; store.mode="fs"; await afterConnect(); return; }
+        // permission à re-demander : il faut un geste utilisateur
+        const btn = document.getElementById("btn-pick-folder");
+        btn.textContent = "📂 Reconnecter le dossier « "+h.name+" »";
+        btn.onclick = async ()=>{
+          try{
+            const p2 = await h.requestPermission({mode:"readwrite"});
+            if(p2==="granted"){ store.dir=h; store.mode="fs"; await afterConnect(); return; }
+          }catch(e){}
+          pickFolder();
+        };
+      }
+    }catch(e){}
+  }
+}
+async function pickFolder(){
+  try{
+    const h = await window.showDirectoryPicker({mode:"readwrite"});
+    await store.connectFolder(h);
+    await afterConnect();
+  }catch(e){
+    if(e && e.name!=="AbortError"){
+      const el=document.getElementById("connect-error");
+      el.textContent = "Erreur d'accès au dossier : "+e.message;
+      el.classList.remove("hidden");
+    }
+  }
+}
+async function afterConnect(){
+  document.getElementById("ov-connect").classList.add("hidden");
+  config = await store.loadConfig();
+  if(!config){ showSetup(); return; }
+  requests = await store.loadRequests();
+  showLogin();
+}
+function showSetup(){
+  document.getElementById("ov-setup").classList.remove("hidden");
+  document.getElementById("btn-setup-ok").onclick = async ()=>{
+    const name = document.getElementById("setup-name").value.trim();
+    if(!name){ return setupErr("Veuillez saisir votre nom."); }
+    const cp  = parseFloat(document.getElementById("setup-cp").value)||0;
+    const rtt = parseFloat(document.getElementById("setup-rtt").value)||0;
+    const y = new Date().getFullYear();
+    config = {
+      version:1,
+      people:[{id:uid(), name, role:"admin", cp, rtt, active:true}],
+      holidays:[...frenchHolidays(y), ...frenchHolidays(y+1)],
+    };
+    try{ await store.saveConfig(config); }
+    catch(e){ return setupErr("Impossible d'écrire dans le dossier : "+e.message); }
+    requests = [];
+    document.getElementById("ov-setup").classList.add("hidden");
+    showLogin();
+  };
+  function setupErr(m){ const el=document.getElementById("setup-error"); el.textContent=m; el.classList.remove("hidden"); }
+}
+function showLogin(){
+  const saved = localStorage.getItem("tc_user");
+  const people = config.people.filter(p=>p.active!==false);
+  if(saved && people.some(p=>p.id===saved)){
+    currentUser = personById(saved); startApp(); return;
+  }
+  const sel = document.getElementById("login-select");
+  sel.innerHTML = people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  document.getElementById("ov-login").classList.remove("hidden");
+  document.getElementById("btn-login").onclick = ()=>{
+    currentUser = personById(sel.value);
+    localStorage.setItem("tc_user", currentUser.id);
+    document.getElementById("ov-login").classList.add("hidden");
+    startApp();
+  };
+}
+function startApp(){
+  document.getElementById("ov-login").classList.add("hidden");
+  document.getElementById("who").innerHTML =
+    `Connecté : <b>${esc(currentUser.name)}</b> <span class="badge ${currentUser.role}">${currentUser.role==="admin"?"Administrateur":"Membre"}</span>`;
+  document.getElementById("mode-indicator").textContent =
+    store.mode==="fs" ? `Dossier : ${store.dir.name}` : "⚠ MODE DÉMO — données locales à ce PC";
+  renderTabs(); render();
+}
+async function reloadData(showToast){
+  if(!config) return;
+  try{
+    const c = await store.loadConfig();
+    if(c) config = c;
+    requests = await store.loadRequests();
+    if(currentUser) currentUser = personById(currentUser.id) || currentUser;
+    render();
+    if(showToast) toast("Données rechargées ✓");
+  }catch(e){ if(showToast) toast("Erreur de rechargement : "+e.message); }
+}
+
+/* =====================================================================
+   Actions métier (les règles de rôle sont appliquées ici ET dans l'UI)
+   ===================================================================== */
+async function createRequest({personId,type,start,end,half,comment}){
+  if(personId!==currentUser.id && !isAdmin()) return alert("Seul un administrateur peut saisir pour quelqu'un d'autre.");
+  if(!TYPES[type]) return alert("Type inconnu.");
+  if(!start || !end || end<start) return alert("Dates invalides.");
+  const days = openDays(start,end,half);
+  if(days===0) return alert("La période ne contient aucun jour ouvré (week-end / férié).");
+  // chevauchement avec une demande existante non refusée du même type "absent"
+  const clash = requests.find(r=>r.personId===personId && r.status!=="rejected" &&
+      r.start<=end && r.end>=start && (TYPES[r.type].absent===TYPES[type].absent));
+  if(clash && !confirm(`Attention : chevauchement avec « ${TYPES[clash.type].label} du ${fmtFr(clash.start)} au ${fmtFr(clash.end)} » (${STATUS[clash.status]}). Continuer ?`)) return;
+
+  const auto = !TYPES[type].needsApproval || isAdmin();
+  const r = {
+    id:uid(), personId, type, start, end, half: (start===end? half||null : null),
+    comment:comment||"", status: auto?"approved":"pending",
+    createdBy: currentUser.id, createdAt: new Date().toISOString(),
+    decidedBy: auto?currentUser.id:null, decidedAt: auto?new Date().toISOString():null, decisionComment:"",
+  };
+  await store.saveRequest(r);
+  requests = requests.filter(x=>x.id!==r.id).concat(r);
+  toast(auto? "Enregistré et validé ✓" : "Demande envoyée — en attente de validation");
+  render();
+}
+async function decide(id, status, comment){
+  if(!isAdmin()) return alert("Seul un administrateur peut valider ou refuser.");
+  const r = requests.find(x=>x.id===id); if(!r) return;
+  r.status = status; r.decidedBy = currentUser.id; r.decidedAt = new Date().toISOString();
+  r.decisionComment = comment||"";
+  await store.saveRequest(r);
+  toast(status==="approved"?"Demande validée ✓":"Demande refusée");
+  render();
+}
+async function removeRequest(id){
+  const r = requests.find(x=>x.id===id); if(!r) return;
+  const own = r.personId===currentUser.id;
+  if(!isAdmin() && !(own && r.status==="pending"))
+    return alert("Vous ne pouvez annuler que vos demandes encore en attente.");
+  if(!confirm("Supprimer / annuler cette demande ?")) return;
+  await store.deleteRequest(id);
+  requests = requests.filter(x=>x.id!==id);
+  toast("Demande supprimée");
+  render();
+}
+
+/* ---------- Soldes ---------- */
+function balances(person, year){
+  const rs = requests.filter(r=>r.personId===person.id);
+  const sum = (type,status)=> rs.filter(r=>r.type===type && r.status===status)
+                                .reduce((s,r)=>s+openDaysInYear(r,year),0);
+  return {
+    cpTaken: sum("CP","approved"),  cpPending: sum("CP","pending"),
+    rttTaken: sum("RTT","approved"),rttPending: sum("RTT","pending"),
+    cpLeft: (person.cp||0) - sum("CP","approved"),
+    rttLeft: (person.rtt||0) - sum("RTT","approved"),
+    sick: sum("MAL","approved"), abs: sum("ABS","approved"), tt: sum("TT","approved"),
+  };
+}
+
+/* =====================================================================
+   Rendu
+   ===================================================================== */
+function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function renderTabs(){
+  const tabs = [
+    {id:"me",   label:"Mon espace"},
+    {id:"cal",  label:"Calendrier équipe"},
+  ];
+  if(isAdmin()){
+    const pend = requests.filter(r=>r.status==="pending").length;
+    tabs.push({id:"valid", label:"Validation"+(pend?` (${pend})`:"")});
+    tabs.push({id:"team",  label:"Équipe & soldes"});
+    tabs.push({id:"settings", label:"Paramètres"});
+  }
+  document.getElementById("tabs").innerHTML = tabs.map(t=>
+    `<button data-tab="${t.id}" class="${currentTab===t.id?'active':''}">${t.label}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(b=>
+    b.onclick = ()=>{ currentTab=b.dataset.tab; render(); });
+}
+function render(){
+  renderTabs();
+  const m = document.getElementById("main");
+  if(currentTab==="me") m.innerHTML = viewMe();
+  else if(currentTab==="cal") m.innerHTML = viewCalendar();
+  else if(currentTab==="valid" && isAdmin()) m.innerHTML = viewValidation();
+  else if(currentTab==="team" && isAdmin()) m.innerHTML = viewTeam();
+  else if(currentTab==="settings" && isAdmin()) m.innerHTML = viewSettings();
+  else { currentTab="me"; m.innerHTML = viewMe(); }
+  bindAfterRender();
+}
+
+/* ---------- Vue : Mon espace ---------- */
+function requestForm(idPrefix, withPerson){
+  const people = config.people.filter(p=>p.active!==false);
+  return `
+    ${withPerson? `<label>Personne</label>
+      <select id="${idPrefix}-person">${people.map(p=>`<option value="${p.id}" ${p.id===currentUser.id?"selected":""}>${esc(p.name)}</option>`).join("")}</select>`:""}
+    <div class="formgrid">
+      <div><label>Type</label>
+        <select id="${idPrefix}-type">${Object.entries(TYPES).map(([k,t])=>`<option value="${k}">${t.label}</option>`).join("")}</select></div>
+      <div><label>Du</label><input type="date" id="${idPrefix}-start" value="${todayIso()}"></div>
+      <div><label>Au</label><input type="date" id="${idPrefix}-end" value="${todayIso()}"></div>
+      <div><label>Demi-journée (si 1 jour)</label>
+        <select id="${idPrefix}-half"><option value="">Journée complète</option><option value="AM">Matin</option><option value="PM">Après-midi</option></select></div>
+    </div>
+    <label>Commentaire (facultatif)</label>
+    <input id="${idPrefix}-comment" placeholder="ex : vacances d'été">
+    <div style="margin-top:12px" class="actions">
+      <button class="btn" id="${idPrefix}-submit">Enregistrer la demande</button>
+      <span class="muted" id="${idPrefix}-days"></span>
+    </div>`;
+}
+function requestRow(r, showPerson){
+  const t = TYPES[r.type];
+  const days = openDays(r.start,r.end,r.half);
+  const own = r.personId===currentUser.id;
+  const canCancel = isAdmin() || (own && r.status==="pending");
+  return `<tr>
+    ${showPerson?`<td>${esc(personById(r.personId)?.name||"?")}</td>`:""}
+    <td><span class="pill" style="background:${t.hex}">${t.label}</span></td>
+    <td>${fmtFr(r.start)}${r.start!==r.end?" → "+fmtFr(r.end):""}${r.half?` (${r.half==="AM"?"matin":"après-midi"})`:""}</td>
+    <td>${days} j</td>
+    <td><span class="pill st-${r.status}">${STATUS[r.status]}</span>
+        ${r.status!=="pending" && r.decidedBy && TYPES[r.type].needsApproval ? `<div class="muted">par ${esc(personById(r.decidedBy)?.name||"?")}${r.decisionComment?" — "+esc(r.decisionComment):""}</div>`:""}</td>
+    <td>${esc(r.comment||"")}</td>
+    <td>${canCancel?`<button class="btn small danger" data-del="${r.id}">✕</button>`:""}</td>
+  </tr>`;
+}
+function viewMe(){
+  const y = new Date().getFullYear();
+  const b = balances(currentUser, y);
+  const mine = requests.filter(r=>r.personId===currentUser.id)
+                       .sort((a,b)=>b.start.localeCompare(a.start));
+  return `
+  <div class="kpis">
+    <div class="kpi"><div class="v" style="color:var(--cp)">${b.cpLeft}</div><div class="l">CP restants ${y} (sur ${currentUser.cp||0})</div></div>
+    <div class="kpi"><div class="v" style="color:var(--rtt)">${b.rttLeft}</div><div class="l">RTT restants ${y} (sur ${currentUser.rtt||0})</div></div>
+    <div class="kpi"><div class="v" style="color:#f59e0b">${b.cpPending+b.rttPending}</div><div class="l">Jours en attente de validation</div></div>
+    <div class="kpi"><div class="v" style="color:var(--tt)">${b.tt}</div><div class="l">Jours de télétravail ${y}</div></div>
+    <div class="kpi"><div class="v" style="color:var(--mal)">${b.sick+b.abs}</div><div class="l">Maladie / imprévu ${y}</div></div>
+  </div>
+  <div class="row" style="margin-top:16px">
+    <div class="card" style="flex:1.2">
+      <h2>➕ Nouvelle demande</h2>
+      ${requestForm("nf", false)}
+      <p class="muted" style="margin-top:10px">Congés payés, RTT et congés sans solde sont soumis à validation.
+      Télétravail, arrêt maladie et absence imprévue sont enregistrés directement.</p>
+    </div>
+    <div class="card" style="flex:2">
+      <h2>📋 Mes demandes & absences</h2>
+      ${mine.length? `<div style="overflow-x:auto"><table>
+        <tr><th>Type</th><th>Dates</th><th>Jours</th><th>Statut</th><th>Commentaire</th><th></th></tr>
+        ${mine.map(r=>requestRow(r,false)).join("")}</table></div>`
+        : `<p class="muted">Aucune demande pour le moment.</p>`}
+    </div>
+  </div>`;
+}
+
+/* ---------- Vue : Calendrier ---------- */
+function dayInfo(personId, dIso){
+  // priorité : validé > en attente ; absence > télétravail
+  const rs = requests.filter(r=>r.personId===personId && r.start<=dIso && r.end>=dIso && r.status!=="rejected");
+  if(!rs.length) return null;
+  rs.sort((a,b)=> (b.status==="approved")-(a.status==="approved") || (TYPES[b.type].absent)-(TYPES[a.type].absent));
+  return rs[0];
+}
+function viewCalendar(){
+  const y=calYear, m=calMonth;
+  const first = new Date(y,m,1), nDays = new Date(y,m+1,0).getDate();
+  const hs = holidaySet();
+  const people = config.people.filter(p=>p.active!==false)
+                   .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  const monthName = first.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  const daysHead = [];
+  for(let d=1; d<=nDays; d++){
+    const dt = new Date(y,m,d);
+    const dIso = iso(dt);
+    daysHead.push(`<th title="${hs.has(dIso)?esc(holidayLabel(dIso)):''}">${"DLMMJVS"[dt.getDay()]}<br>${d}</th>`);
+  }
+  const rows = people.map(p=>{
+    const cells=[];
+    for(let d=1; d<=nDays; d++){
+      const dt=new Date(y,m,d), dIso=iso(dt);
+      if(isWeekend(dt)){ cells.push(`<td class="we"></td>`); continue; }
+      if(hs.has(dIso)){ cells.push(`<td class="hol" title="${esc(holidayLabel(dIso)||'Férié')}">F</td>`); continue; }
+      const r = dayInfo(p.id,dIso);
+      if(!r){ cells.push(`<td></td>`); continue; }
+      const t = TYPES[r.type];
+      const pend = r.status==="pending";
+      cells.push(`<td class="absent ${pend?'pending-cell':''}" style="background:${t.hex}"
+        title="${t.label}${pend?' (en attente)':''} — ${esc(p.name)}">${r.type==="TT"?"T":r.type[0]}</td>`);
+    }
+    return `<tr><td class="person">${esc(p.name)}</td>${cells.join("")}</tr>`;
+  });
+  // ligne capacité : nb de personnes disponibles (présentes ou en télétravail, validé)
+  const capCells=[];
+  for(let d=1; d<=nDays; d++){
+    const dt=new Date(y,m,d), dIso=iso(dt);
+    if(isWeekend(dt) || hs.has(dIso)){ capCells.push(`<td class="we"></td>`); continue; }
+    let avail=0;
+    for(const p of people){
+      const r = dayInfo(p.id,dIso);
+      if(!r || r.status!=="approved" || !TYPES[r.type].absent) avail++;
+    }
+    capCells.push(`<td>${avail}</td>`);
+  }
+  return `
+  <div class="card">
+    <div class="actions" style="align-items:center; margin-bottom:12px">
+      <button class="btn small secondary" id="cal-prev">◀</button>
+      <b style="min-width:160px; text-align:center; text-transform:capitalize">${monthName}</b>
+      <button class="btn small secondary" id="cal-next">▶</button>
+      <button class="btn small secondary" id="cal-today">Aujourd'hui</button>
+      <span class="muted">Effectif : ${people.length} — les cases estompées sont en attente de validation.</span>
+    </div>
+    <div class="calwrap">
+      <table class="cal">
+        <tr><th class="person">Personne</th>${daysHead.join("")}</tr>
+        ${rows.join("")}
+        <tr class="caprow"><td class="person">Disponibles</td>${capCells.join("")}</tr>
+      </table>
+    </div>
+    <div class="legend">
+      ${Object.entries(TYPES).map(([k,t])=>`<span><span class="sw" style="background:${t.hex}"></span>${t.label} (${k==="TT"?"T":k[0]})</span>`).join("")}
+      <span><span class="sw" style="background:#fde68a"></span>Férié (F)</span>
+      <span><span class="sw" style="background:#eef1f5"></span>Week-end</span>
+    </div>
+  </div>`;
+}
+
+/* ---------- Vue : Validation (admin) ---------- */
+function viewValidation(){
+  const pend = requests.filter(r=>r.status==="pending").sort((a,b)=>a.start.localeCompare(b.start));
+  return `
+  <div class="card">
+    <h2>✅ Demandes en attente de validation</h2>
+    ${pend.length? `<div style="overflow-x:auto"><table>
+      <tr><th>Personne</th><th>Type</th><th>Dates</th><th>Jours</th><th>Commentaire</th><th>Demandé le</th><th>Action</th></tr>
+      ${pend.map(r=>{
+        const t=TYPES[r.type], p=personById(r.personId);
+        return `<tr>
+          <td><b>${esc(p?.name||"?")}</b></td>
+          <td><span class="pill" style="background:${t.hex}">${t.label}</span></td>
+          <td>${fmtFr(r.start)}${r.start!==r.end?" → "+fmtFr(r.end):""}${r.half?` (${r.half==="AM"?"matin":"après-midi"})`:""}</td>
+          <td>${openDays(r.start,r.end,r.half)} j</td>
+          <td>${esc(r.comment||"")}</td>
+          <td>${new Date(r.createdAt).toLocaleDateString("fr-FR")}</td>
+          <td class="actions">
+            <button class="btn small ok" data-approve="${r.id}">Valider</button>
+            <button class="btn small danger" data-reject="${r.id}">Refuser</button>
+          </td></tr>`;
+      }).join("")}</table></div>`
+      : `<p class="muted">🎉 Aucune demande en attente.</p>`}
+  </div>
+  <div class="card">
+    <h2>Historique des décisions récentes</h2>
+    <div style="overflow-x:auto"><table>
+      <tr><th>Personne</th><th>Type</th><th>Dates</th><th>Statut</th><th>Décidé par</th><th></th></tr>
+      ${requests.filter(r=>r.status!=="pending" && TYPES[r.type].needsApproval)
+        .sort((a,b)=>(b.decidedAt||"").localeCompare(a.decidedAt||"")).slice(0,15)
+        .map(r=>`<tr>
+          <td>${esc(personById(r.personId)?.name||"?")}</td>
+          <td>${TYPES[r.type].label}</td>
+          <td>${fmtFr(r.start)}${r.start!==r.end?" → "+fmtFr(r.end):""}</td>
+          <td><span class="pill st-${r.status}">${STATUS[r.status]}</span></td>
+          <td>${esc(personById(r.decidedBy)?.name||"—")}</td>
+          <td><button class="btn small danger" data-del="${r.id}">✕</button></td>
+        </tr>`).join("")}
+    </table></div>
+  </div>`;
+}
+
+/* ---------- Vue : Équipe (admin) ---------- */
+function viewTeam(){
+  const y = new Date().getFullYear();
+  const people = config.people.filter(p=>p.active!==false)
+                   .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  return `
+  <div class="card">
+    <h2>👥 Soldes de l'équipe — ${y}</h2>
+    <div style="overflow-x:auto"><table>
+      <tr><th>Personne</th><th>Rôle</th><th>CP pris</th><th>CP en attente</th><th>CP restants</th>
+          <th>RTT pris</th><th>RTT restants</th><th>Maladie</th><th>Imprévus</th><th>Télétravail</th></tr>
+      ${people.map(p=>{
+        const b = balances(p,y);
+        return `<tr><td><b>${esc(p.name)}</b></td>
+          <td><span class="badge ${p.role}">${p.role==="admin"?"Admin":"Membre"}</span></td>
+          <td>${b.cpTaken}</td><td>${b.cpPending||"—"}</td><td><b>${b.cpLeft}</b> / ${p.cp||0}</td>
+          <td>${b.rttTaken}</td><td><b>${b.rttLeft}</b> / ${p.rtt||0}</td>
+          <td>${b.sick||"—"}</td><td>${b.abs||"—"}</td><td>${b.tt||"—"}</td></tr>`;
+      }).join("")}
+    </table></div>
+    <div style="margin-top:12px"><button class="btn secondary small" id="btn-export-csv">⬇ Exporter toutes les demandes (CSV)</button></div>
+  </div>
+  <div class="card">
+    <h2>➕ Saisir une absence pour un membre de l'équipe</h2>
+    <p class="muted">En tant qu'administrateur, votre saisie est validée automatiquement
+    (utile pour enregistrer un arrêt maladie ou régulariser un congé).</p>
+    ${requestForm("af", true)}
+  </div>`;
+}
+
+/* ---------- Vue : Paramètres (admin) ---------- */
+function viewSettings(){
+  const people = [...config.people].sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  const hols = [...config.holidays].sort((a,b)=>a.date.localeCompare(b.date));
+  const y = new Date().getFullYear();
+  return `
+  <div class="row">
+    <div class="card">
+      <h2>👤 Personnes</h2>
+      <div style="overflow-x:auto"><table>
+        <tr><th>Nom</th><th>Rôle</th><th>CP/an</th><th>RTT/an</th><th>Actif</th><th></th></tr>
+        ${people.map(p=>`<tr>
+          <td>${esc(p.name)}</td>
+          <td><select data-prole="${p.id}"><option value="user" ${p.role==="user"?"selected":""}>Membre</option><option value="admin" ${p.role==="admin"?"selected":""}>Admin</option></select></td>
+          <td><input type="number" step="0.5" min="0" style="width:70px" data-pcp="${p.id}" value="${p.cp||0}"></td>
+          <td><input type="number" step="0.5" min="0" style="width:70px" data-prtt="${p.id}" value="${p.rtt||0}"></td>
+          <td style="text-align:center"><input type="checkbox" data-pactive="${p.id}" ${p.active!==false?"checked":""}></td>
+          <td>${p.id!==currentUser.id?`<button class="btn small danger" data-pdel="${p.id}" title="Supprimer">✕</button>`:""}</td>
+        </tr>`).join("")}
+      </table></div>
+      <div class="actions" style="margin-top:10px">
+        <input id="np-name" placeholder="Nom du nouveau membre" style="max-width:220px">
+        <button class="btn small" id="btn-add-person">Ajouter</button>
+        <button class="btn small ok" id="btn-save-people">💾 Enregistrer les modifications</button>
+      </div>
+      <p class="muted" style="margin-top:8px">« Désactiver » (décocher Actif) masque la personne sans perdre son historique.</p>
+    </div>
+    <div class="card">
+      <h2>🎌 Jours fériés</h2>
+      <div class="actions" style="margin-bottom:10px">
+        <input id="hol-year" type="number" value="${y+1}" style="max-width:100px">
+        <button class="btn small" id="btn-gen-holidays">Générer les fériés France</button>
+      </div>
+      <div class="actions" style="margin-bottom:10px">
+        <input id="hol-date" type="date" style="max-width:160px">
+        <input id="hol-label" placeholder="Libellé (ex : pont)" style="max-width:180px">
+        <button class="btn small" id="btn-add-holiday">Ajouter</button>
+      </div>
+      <div style="max-height:320px; overflow:auto"><table>
+        <tr><th>Date</th><th>Libellé</th><th></th></tr>
+        ${hols.map(h=>`<tr><td>${fmtFr(h.date)}</td><td>${esc(h.label)}</td>
+          <td><button class="btn small danger" data-hdel="${h.date}">✕</button></td></tr>`).join("")}
+      </table></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>💾 Données</h2>
+    <p class="muted">Mode : <b>${store.mode==="fs"?`dossier partagé « ${esc(store.dir.name)} »`:"démo (localStorage)"}</b>.
+    Chaque demande est un fichier JSON individuel dans <code>requests/</code>, la configuration est dans <code>config.json</code>.
+    Pensez à faire une copie de sauvegarde du dossier de temps en temps.</p>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn small secondary" id="btn-change-folder">Changer de dossier de données</button>
+    </div>
+  </div>`;
+}
+
+/* ---------- CSV ---------- */
+function exportCsv(){
+  const head = "Personne;Type;Debut;Fin;Demi-journee;Jours ouvres;Statut;Commentaire;Cree le;Decide par\n";
+  const lines = requests.sort((a,b)=>a.start.localeCompare(b.start)).map(r=>[
+    personById(r.personId)?.name||"?", TYPES[r.type].label, r.start, r.end, r.half||"",
+    openDays(r.start,r.end,r.half), STATUS[r.status], (r.comment||"").replace(/;/g,","),
+    r.createdAt?.slice(0,10)||"", personById(r.decidedBy)?.name||"",
+  ].join(";"));
+  const blob = new Blob(["﻿"+head+lines.join("\n")], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `absences_${todayIso()}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ---------- Liaisons post-rendu ---------- */
+function bindForm(prefix, withPerson){
+  const submit = document.getElementById(prefix+"-submit");
+  if(!submit) return;
+  const upd = ()=>{
+    const s=document.getElementById(prefix+"-start").value, e=document.getElementById(prefix+"-end").value;
+    const h=document.getElementById(prefix+"-half").value||null;
+    if(s && e && e>=s) document.getElementById(prefix+"-days").textContent = openDays(s,e,h)+" jour(s) ouvré(s)";
+    else document.getElementById(prefix+"-days").textContent = "";
+    // si la date de fin est avant le début, l'aligner
+    if(s && (!e || e<s)) document.getElementById(prefix+"-end").value = s;
+  };
+  ["start","end","half"].forEach(f=>document.getElementById(prefix+"-"+f).onchange=upd);
+  upd();
+  submit.onclick = ()=>{
+    createRequest({
+      personId: withPerson? document.getElementById(prefix+"-person").value : currentUser.id,
+      type: document.getElementById(prefix+"-type").value,
+      start: document.getElementById(prefix+"-start").value,
+      end: document.getElementById(prefix+"-end").value,
+      half: document.getElementById(prefix+"-half").value||null,
+      comment: document.getElementById(prefix+"-comment").value,
+    });
+  };
+}
+function bindAfterRender(){
+  bindForm("nf", false);
+  bindForm("af", true);
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.del));
+  document.querySelectorAll("[data-approve]").forEach(b=>b.onclick=()=>decide(b.dataset.approve,"approved"));
+  document.querySelectorAll("[data-reject]").forEach(b=>b.onclick=()=>{
+    const c = prompt("Motif du refus (facultatif) :")||"";
+    decide(b.dataset.reject,"rejected",c);
+  });
+  const q = id=>document.getElementById(id);
+  if(q("cal-prev")) q("cal-prev").onclick = ()=>{ calMonth--; if(calMonth<0){calMonth=11;calYear--;} render(); };
+  if(q("cal-next")) q("cal-next").onclick = ()=>{ calMonth++; if(calMonth>11){calMonth=0;calYear++;} render(); };
+  if(q("cal-today")) q("cal-today").onclick = ()=>{ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); render(); };
+  if(q("btn-export-csv")) q("btn-export-csv").onclick = exportCsv;
+  if(q("btn-change-folder")) q("btn-change-folder").onclick = async ()=>{
+    if(!window.showDirectoryPicker) return alert("Indisponible dans ce navigateur.");
+    try{
+      const h = await window.showDirectoryPicker({mode:"readwrite"});
+      await store.connectFolder(h);
+      config = await store.loadConfig();
+      if(!config){ document.getElementById("ov-setup").classList.remove("hidden"); showSetup(); return; }
+      await reloadData(true); startApp();
+    }catch(e){}
+  };
+  // Paramètres : personnes
+  if(q("btn-add-person")) q("btn-add-person").onclick = async ()=>{
+    const name = q("np-name").value.trim();
+    if(!name) return;
+    config.people.push({id:uid(), name, role:"user", cp:25, rtt:10, active:true});
+    await store.saveConfig(config); toast("Membre ajouté ✓"); render();
+  };
+  if(q("btn-save-people")) q("btn-save-people").onclick = async ()=>{
+    for(const p of config.people){
+      const role = document.querySelector(`[data-prole="${p.id}"]`);
+      const cp = document.querySelector(`[data-pcp="${p.id}"]`);
+      const rtt = document.querySelector(`[data-prtt="${p.id}"]`);
+      const act = document.querySelector(`[data-pactive="${p.id}"]`);
+      if(role) p.role = role.value;
+      if(cp) p.cp = parseFloat(cp.value)||0;
+      if(rtt) p.rtt = parseFloat(rtt.value)||0;
+      if(act) p.active = act.checked;
+    }
+    if(!config.people.some(p=>p.role==="admin" && p.active!==false))
+      return alert("Impossible : il doit rester au moins un administrateur actif.");
+    await store.saveConfig(config);
+    currentUser = personById(currentUser.id);
+    toast("Modifications enregistrées ✓"); startApp();
+  };
+  document.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=async ()=>{
+    const p = personById(b.dataset.pdel);
+    const has = requests.some(r=>r.personId===p.id);
+    if(has) return alert(`${p.name} a des demandes enregistrées : désactivez la personne (case « Actif ») plutôt que de la supprimer.`);
+    if(!confirm(`Supprimer ${p.name} ?`)) return;
+    config.people = config.people.filter(x=>x.id!==p.id);
+    await store.saveConfig(config); toast("Personne supprimée"); render();
+  });
+  // Paramètres : fériés
+  if(q("btn-gen-holidays")) q("btn-gen-holidays").onclick = async ()=>{
+    const y = parseInt(q("hol-year").value);
+    if(!y || y<2000 || y>2100) return alert("Année invalide.");
+    const existing = new Set(config.holidays.map(h=>h.date));
+    let added=0;
+    for(const h of frenchHolidays(y)) if(!existing.has(h.date)){ config.holidays.push(h); added++; }
+    await store.saveConfig(config); toast(added+" férié(s) ajouté(s)"); render();
+  };
+  if(q("btn-add-holiday")) q("btn-add-holiday").onclick = async ()=>{
+    const d = q("hol-date").value, l = q("hol-label").value.trim()||"Férié";
+    if(!d) return;
+    if(config.holidays.some(h=>h.date===d)) return alert("Cette date est déjà fériée.");
+    config.holidays.push({date:d,label:l});
+    await store.saveConfig(config); toast("Jour ajouté ✓"); render();
+  };
+  document.querySelectorAll("[data-hdel]").forEach(b=>b.onclick=async ()=>{
+    config.holidays = config.holidays.filter(h=>h.date!==b.dataset.hdel);
+    await store.saveConfig(config); render();
+  });
+}
+
+/* ---------- Toast ---------- */
+let toastTimer=null;
+function toast(msg){
+  document.querySelectorAll(".toast").forEach(t=>t.remove());
+  const t = document.createElement("div");
+  t.className="toast"; t.textContent=msg;
+  document.body.appendChild(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.remove(), 3500);
+}
+
+boot();
+</script>
+</body>
+</html>
