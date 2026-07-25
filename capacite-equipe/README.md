@@ -85,10 +85,12 @@ Le **calendrier équipe** et **Équipes & soldes (Teams & balances)**
 regroupent les personnes par équipe (bandeau coloré + nom + effectif).
 Chaque bandeau porte un bouton **▼ / ▶** pour réduire (collapse) ou déplier
 (expand) l'équipe correspondante — pratique pour se concentrer sur une
-partie de l'organisation sans changer le filtre. L'état replié/déplié est
-mémorisé pendant la session et partagé entre les deux écrans, mais n'affecte
-jamais les totaux (ligne « Disponibles », soldes) qui restent calculés sur
-tout le monde même équipe repliée.
+partie de l'organisation sans changer le filtre. Un bouton **Expand all** /
+**Collapse all** dans la barre d'outils de chaque écran déplie ou replie
+toutes les équipes en un clic. L'état replié/déplié est mémorisé pendant la
+session et partagé entre les deux écrans, mais n'affecte jamais les totaux
+(ligne « Disponibles », soldes) qui restent calculés sur tout le monde même
+équipe repliée.
 
 ### Affichage des personnes : trigramme d'équipe
 
@@ -155,11 +157,31 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
 
 ### Projets & affectations (profil Chef de projet)
 
-- Un projet peut viser **plusieurs cibles équipe/compétence** (bloc « Cibles
-  équipe / compétence » de l'éditeur — en ajouter, en retirer ; laisser la
-  compétence vide vise toute l'équipe). Il est créé avec une première cible,
-  les suivantes s'ajoutent ensuite.
-- Deux façons d'affecter des personnes, combinables :
+- **Création** : un projet se crée avec seulement un **nom**, une **date de
+  début**, une **date de fin** et un **code Triskell** (référence libre,
+  sans lien fonctionnel pour l'instant — utile plus tard). Ni équipe ni
+  compétence ne sont demandées à ce stade.
+- **Charge attendue par compétence** : une fois le projet créé, on ajoute
+  une ligne de charge par compétence (« Expected workload by skill ») avec
+  un **total de jours interne** et un **total de jours externe**. Par
+  défaut cette charge est **lissée uniformément** sur tous les mois du
+  projet (total ÷ nombre de mois). Le chef de projet peut **surcharger un
+  mois précis** (le reste se rééquilibre automatiquement sur les mois non
+  modifiés) ou tout réinitialiser au lissage uniforme (« ↺ Reset to even
+  split »).
+- **Cibles équipe/compétence** : un projet peut viser **plusieurs cibles
+  équipe/compétence** (bloc « Team / skill targets » — en ajouter, en
+  retirer ; laisser la compétence vide vise toute l'équipe). Dès qu'une
+  cible correspond à la compétence d'une ligne de charge, la charge
+  planifiée est comparée à la **capacité disponible agrégée** de toutes les
+  personnes actives de cette équipe/compétence (jours ouvrés − absences
+  validées − autres affectations), séparément pour interne et externe. Un
+  mois où la charge planifiée dépasse la capacité disponible s'affiche en
+  rouge ; « — » signifie qu'aucune cible ne correspond encore à cette
+  compétence.
+- Deux façons d'affecter des personnes **nommément**, combinables, et
+  indépendantes de la vérification de charge ci-dessus (utile notamment
+  pour forcer une personne transverse sur un % donné) :
   - **Affectation groupée** : on choisit UNE des cibles du projet, un % et
     une période, appliqués en un clic à toutes les personnes actives
     correspondantes ;
@@ -175,14 +197,6 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   dans le capacity plan — l'application avertit mais ne bloque pas la
   saisie, à vous de trancher. Décocher « Actif » suspend un projet sans
   perdre ses affectations.
-- **Charge & délais** : pour chaque compétence du projet, indiquez la
-  **charge restante** (en jours-personnes) et la **date de fin souhaitée**.
-  L'application calcule, à partir des personnes déjà affectées sur ce
-  projet (filtrées par cette compétence), la capacité planifiée d'ici cette
-  date, le rythme mensuel requis pour tenir le délai, le rythme
-  actuellement planifié, et un verdict (✅ Tenable / ⚠ Manque X j-p / Date
-  dépassée) — de quoi projeter la capacité des mois à venir et vérifier que
-  le délai est réaliste avant de s'engager.
 - Stockage : un fichier JSON par projet (`projects/proj_*.json`), même
   logique anti-conflits que les demandes.
 

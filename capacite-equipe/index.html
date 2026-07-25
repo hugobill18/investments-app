@@ -606,14 +606,79 @@ function migrate(cfg){
   }
   return cfg;
 }
-/* Project migration: old single teamId/skill -> targets[] array */
+/* Project migration:
+   v1 -> v2: single teamId/skill -> targets[] array.
+   v2 -> v3: project gets its own start/end dates and a Triskell code;
+   workload lines get a stable id and an internal/external split (a
+   legacy single "remainingDays" figure becomes the internal share by
+   default) plus a sparse monthly override map. */
 function migrateProject(p){
   if(!Array.isArray(p.targets)){
     p.targets = p.teamId ? [{teamId:p.teamId, skill:p.skill||""}] : [];
     delete p.teamId; delete p.skill;
   }
   if(!Array.isArray(p.workloads)) p.workloads = [];
+  if(p.startDate===undefined || p.endDate===undefined){
+    const dueDates = p.workloads.map(w=>w.dueDate).filter(Boolean).sort();
+    p.startDate = p.startDate || todayIso();
+    p.endDate = p.endDate || dueDates[dueDates.length-1] || iso(addDays(fromIso(todayIso()),365));
+  }
+  if(p.triskellCode===undefined) p.triskellCode = "";
+  p.workloads = p.workloads.map(w=>({
+    id: w.id || uid(),
+    skill: w.skill||"",
+    internalDays: w.internalDays!=null ? w.internalDays : (w.remainingDays||0),
+    externalDays: w.externalDays!=null ? w.externalDays : 0,
+    monthlyOverride: w.monthlyOverride || {},
+  }));
   return p;
+}
+/* List of consecutive {y,m,key} months spanning a project's start/end
+   dates (inclusive), used to smooth workload evenly by default. */
+function projectMonths(pr){
+  if(!pr.startDate || !pr.endDate || pr.endDate<pr.startDate) return [];
+  const out=[];
+  const s = fromIso(pr.startDate), e = fromIso(pr.endDate);
+  let y=s.getFullYear(), m=s.getMonth();
+  const endKey = `${e.getFullYear()}-${pad(e.getMonth()+1)}`;
+  let guard=0;
+  while(true){
+    const key = `${y}-${pad(m+1)}`;
+    out.push({y,m,key});
+    if(key===endKey || ++guard>240) break;
+    m++; if(m>11){m=0;y++;}
+  }
+  return out;
+}
+/* Per-month planned days for one contract type of a workload line: any
+   month the PM has overridden keeps that value; the remaining total (line
+   total minus the sum of overrides) is split evenly across the
+   non-overridden months — so overriding a few months doesn't require
+   re-balancing the rest by hand. */
+function workloadMonthlySeries(w, months, kind){
+  const field = kind==="internal" ? "internalDays" : "externalDays";
+  const total = w[field]||0;
+  const n = months.length;
+  if(n===0) return [];
+  const overrides = months.map(mo => w.monthlyOverride?.[mo.key]?.[kind]);
+  const overrideSum = overrides.reduce((s,v)=>s+(v!=null?v:0),0);
+  const overrideCount = overrides.filter(v=>v!=null).length;
+  const evenShare = (n-overrideCount)>0 ? Math.max(0,total-overrideSum)/(n-overrideCount) : 0;
+  return months.map((mo,i)=> overrides[i]!=null ? overrides[i] : evenShare);
+}
+/* Aggregate remaining capacity (person-days) of the active people who
+   match one of the project's targets for a given skill and contract
+   type — null if no target has been assigned for that skill yet. */
+function targetSkillCapacity(pr, skill, y, m, kind){
+  const matching = (pr.targets||[]).filter(t=>!t.skill || t.skill===skill);
+  if(!matching.length) return null;
+  const teamIds = new Set(matching.map(t=>t.teamId));
+  const people = activePeople().filter(p=>teamIds.has(p.teamId) && (p.skill||"").trim()===skill &&
+    (kind==="internal" ? p.contract!=="externe" : p.contract==="externe"));
+  return people.reduce((s,p)=>s+Math.max(0,personMonthRemaining(p,y,m,false)),0);
+}
+function allSkills(){
+  return [...new Set(activePeople().map(p=>(p.skill||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"en"));
 }
 
 /* Minimal IndexedDB wrapper to remember the chosen folder between launches */
@@ -968,6 +1033,8 @@ function locOptions(sel){
 function toggleTeam(id){
   if(collapsedTeams.has(id)) collapsedTeams.delete(id); else collapsedTeams.add(id);
 }
+function collapseAllTeams(){ collapsedTeams = new Set(config.teams.map(t=>t.id)); }
+function expandAllTeams(){ collapsedTeams = new Set(); }
 function teamHeaderRow(t, memberCount, colspan){
   const collapsed = collapsedTeams.has(t.id);
   return `<tr class="teamhead"><td colspan="${colspan}" style="border-left:4px solid ${teamColor(t.id)}">
@@ -1186,6 +1253,8 @@ function viewCalendar(){
       <button class="btn small secondary" id="cal-next">▶</button>
       <button class="btn small secondary" id="cal-today">Today</button>
       <select id="cal-team" style="max-width:220px">${teamOptions(calTeam,true)}</select>
+      <button class="btn small secondary" id="cal-expand-all">Expand all</button>
+      <button class="btn small secondary" id="cal-collapse-all">Collapse all</button>
       <span class="muted">Shown: ${people.length}, grouped by team — dimmed cells = pending. Public holidays (H) depend on each person's location.</span>
     </div>
     <div class="calwrap">
@@ -1423,40 +1492,12 @@ function projectOverloads(y){
   return out;
 }
 function targetLabel(t){ return `${teamById(t.teamId)?.name||"—"}${t.skill?" · "+t.skill:" (all skills)"}`; }
-function projectTargetSkills(pr){
-  const set = new Set();
-  for(const t of pr.targets||[]){ if(t.skill) set.add(t.skill); for(const s of teamSkills(t.teamId)) set.add(s); }
-  return [...set].sort((a,b)=>a.localeCompare(b,"en"));
-}
-/* Capacity planned ON THIS PROJECT for people with a given skill (empty =
-   all), from the current month through the due month inclusive. */
-function workloadCalc(pr, w){
-  if(!w.dueDate || w.dueDate<todayIso()) return {planned:0, months:0, overdue:true};
-  const dd = fromIso(w.dueDate);
-  let y=now.getFullYear(), m=now.getMonth();
-  const yEnd=dd.getFullYear(), mEnd=dd.getMonth();
-  let planned=0, months=0;
-  const peopleIds = Object.keys(pr.allocations||{});
-  while(y<yEnd || (y===yEnd && m<=mEnd)){
-    months++;
-    for(const pid of peopleIds){
-      const p = personById(pid); if(!p) continue;
-      if(w.skill && (p.skill||"").trim()!==w.skill) continue;
-      const key=`${y}-${pad(m+1)}`;
-      const pct=(pr.allocations[pid]||{})[key]||0;
-      if(pct>0) planned += personMonthOpen(p,y,m)*pct/100;
-    }
-    m++; if(m>11){m=0;y++;}
-    if(months>60) break;
-  }
-  return {planned, months, overdue:false};
-}
 function viewProjects(){
   const y = projYear;
   const pr = projects.find(p=>p.id===projSel);
   const list = [...projects].sort((a,b)=>a.name.localeCompare(b.name,"en"));
   const listHtml = list.length ? `<div style="overflow-x:auto"><table>
-    <tr><th>Project</th><th>Team/skill targets</th><th>People allocated</th><th>Active</th><th></th></tr>
+    <tr><th>Project</th><th>Triskell code</th><th>Dates</th><th>Team/skill targets</th><th>People allocated</th><th>Active</th><th></th></tr>
     ${list.map(p=>{
       const n = Object.keys(p.allocations||{}).length;
       const chips = (p.targets||[]).map(t=>
@@ -1464,32 +1505,33 @@ function viewProjects(){
       ).join("<br>") || "—";
       return `<tr ${p.id===projSel?'style="background:#eff6ff"':''}>
         <td><b>${esc(p.name)}</b></td>
+        <td>${esc(p.triskellCode||"—")}</td>
+        <td>${fmtDate(p.startDate)} → ${fmtDate(p.endDate)}</td>
         <td>${chips}</td>
         <td>${n||"—"}</td>
         <td style="text-align:center"><input type="checkbox" data-pract="${p.id}" ${p.active!==false?"checked":""}></td>
         <td class="actions">
-          <button class="btn small" data-popen="${p.id}">Allocations</button>
+          <button class="btn small" data-popen="${p.id}">Open</button>
           <button class="btn small danger" data-pdel-proj="${p.id}">✕</button>
         </td></tr>`;
     }).join("")}
   </table></div>` : `<p class="muted">No projects yet — create the first one below.</p>`;
 
-  const newSkills = teamSkills(config.teams[0].id);
   const createHtml = `
     <h2 style="margin-top:16px">➕ New project</h2>
     <div class="actions">
-      <input id="proj-new-name" placeholder="Project name" style="max-width:220px">
-      <select id="proj-new-team" style="max-width:220px">${teamOptions(config.teams[0].id,false)}</select>
-      <input id="proj-new-skill" list="proj-skill-dl" placeholder="Target skill (optional)" style="max-width:200px">
-      <datalist id="proj-skill-dl">${newSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
+      <input id="proj-new-name" placeholder="Project name" style="max-width:200px">
+      <label style="display:inline; margin:0">From <input type="date" id="proj-new-start" value="${todayIso()}" style="max-width:150px"></label>
+      <label style="display:inline; margin:0">To <input type="date" id="proj-new-end" value="${iso(addDays(fromIso(todayIso()),365))}" style="max-width:150px"></label>
+      <input id="proj-new-triskell" placeholder="Triskell code" style="max-width:150px">
       <button class="btn small" id="btn-add-proj">Create</button>
     </div>
-    <p class="muted" style="margin-top:6px">The skill is suggested from the chosen team's members
-    (set in Settings → People), but stays free text; leave it blank to target the whole team.
-    More team/skill targets can be added afterwards in the project editor.</p>`;
+    <p class="muted" style="margin-top:6px">Team/skill targeting and the expected workload are set up next,
+    inside the project once it's created.</p>`;
 
   let editorHtml = "";
   if(pr){
+    const months = projectMonths(pr);
     const allocated = sortPeople(Object.keys(pr.allocations||{}).map(personById).filter(Boolean));
     const addable = sortPeople(activePeople().filter(p=>!(pr.allocations||{})[p.id]));
     const defStartM = y===now.getFullYear() ? now.getMonth() : 0;
@@ -1511,37 +1553,74 @@ function viewProjects(){
       <td><button class="btn small danger" data-tgtdel="${i}">✕</button></td></tr>`).join("");
     const tSkills = teamSkills(config.teams[0].id);
     const bulkOptions = targets.map((t,i)=>`<option value="${i}">${esc(targetLabel(t))}</option>`).join("");
-    const wSkills = projectTargetSkills(pr);
-    const workloadRows = (pr.workloads||[]).map((w,i)=>{
-      const c = workloadCalc(pr,w);
-      const shortfall = w.remainingDays - c.planned;
-      const reqPace = c.months>0 ? w.remainingDays/c.months : null;
-      const planPace = c.months>0 ? c.planned/c.months : 0;
-      const verdict = c.overdue ? `<span class="pill st-rejected">Overdue</span>`
-        : (shortfall<=0.001 ? `<span class="pill st-approved">✅ On track</span>`
-                             : `<span class="pill st-rejected">⚠ Short by ${fmtDays(shortfall)} d</span>`);
-      return `<tr>
-        <td>${esc(w.skill||"(all skills)")}</td>
-        <td><input type="number" min="0" step="0.5" style="width:80px" data-wldays="${i}" value="${w.remainingDays}"></td>
-        <td><input type="date" style="width:150px" data-wldue="${i}" value="${w.dueDate}"></td>
-        <td>${fmtDays(c.planned)} d${!c.overdue?` <span class="muted">(${c.months} mo.)</span>`:""}</td>
-        <td>${reqPace!=null?fmtDays(reqPace)+" d/mo":"—"}</td>
-        <td>${fmtDays(planPace)} d/mo</td>
-        <td>${verdict}</td>
-        <td><button class="btn small danger" data-wldel="${i}" title="Delete">✕</button></td>
-      </tr>`;
+    const wSkills = allSkills();
+
+    const workloadBlocks = (pr.workloads||[]).map(w=>{
+      if(!months.length) return `<div class="notice err" style="margin-top:10px">Set a valid project start/end date to plan "${esc(w.skill||"(unnamed)")}".</div>`;
+      const intSeries = workloadMonthlySeries(w, months, "internal");
+      const extSeries = workloadMonthlySeries(w, months, "external");
+      const plannedRow = (kind, series) => months.map((mo,i)=>{
+        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m, kind);
+        const over = cap!=null && series[i]>cap+0.001;
+        return `<td><input type="number" min="0" step="0.5" style="width:56px; text-align:right; ${over?'color:var(--danger); font-weight:700;':''}"
+          data-wlmonth="${w.id}|${mo.key}|${kind}" value="${fmtDays(series[i])}"
+          title="${cap!=null?`Available capacity: ${fmtDays(cap)} d`:'No team/skill target assigned for this skill yet'}"></td>`;
+      }).join("");
+      const capRow = (kind) => months.map(mo=>{
+        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m, kind);
+        return `<td class="muted">${cap==null?"—":fmtDays(cap)}</td>`;
+      }).join("");
+      return `
+      <div class="card" style="margin-top:10px">
+        <div class="actions">
+          <b>${esc(w.skill||"(unnamed skill)")}</b>
+          <label style="display:inline; margin:0">Internal total <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}|internal" value="${w.internalDays||0}"></label>
+          <label style="display:inline; margin:0">External total <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}|external" value="${w.externalDays||0}"></label>
+          <button class="btn small secondary" data-wlreset="${w.id}">↺ Reset to even split</button>
+          <button class="btn small danger" data-wldel="${w.id}">✕ Delete line</button>
+        </div>
+        <div class="calwrap" style="margin-top:8px">
+          <table class="cal">
+            <tr><th class="person">Month</th>${months.map(mo=>`<th>${monthName(mo.y,mo.m,true)} ${mo.y}</th>`).join("")}</tr>
+            <tr><td class="person">Internal planned (d)</td>${plannedRow("internal", intSeries)}</tr>
+            <tr><td class="person">Internal capacity (d)</td>${capRow("internal")}</tr>
+            <tr><td class="person">External planned (d)</td>${plannedRow("external", extSeries)}</tr>
+            <tr><td class="person">External capacity (d)</td>${capRow("external")}</tr>
+          </table>
+        </div>
+      </div>`;
     }).join("");
+
     editorHtml = `
     <div class="card">
       <div class="actions" style="margin-bottom:10px">
-        <h2 style="margin:0">🗓 Allocations — ${esc(pr.name)}</h2>
-        <button class="btn small secondary" id="proj-prev">◀</button>
-        <b>${y}</b>
-        <button class="btn small secondary" id="proj-next">▶</button>
+        <h2 style="margin:0">${esc(pr.name)}</h2>
         <button class="btn small secondary" id="proj-close">Close</button>
       </div>
+      <div class="actions">
+        <label style="display:inline; margin:0">From <input type="date" id="proj-start" value="${pr.startDate}" style="max-width:150px"></label>
+        <label style="display:inline; margin:0">To <input type="date" id="proj-end" value="${pr.endDate}" style="max-width:150px"></label>
+        <label style="display:inline; margin:0">Triskell code <input id="proj-triskell" value="${esc(pr.triskellCode||"")}" style="max-width:150px"></label>
+        <button class="btn small ok" id="btn-save-proj-info">💾 Save</button>
+      </div>
 
-      <h3>Team / skill targets</h3>
+      <h3 style="margin-top:20px">Expected workload by skill</h3>
+      <p class="muted">Total charge (in person-days), per skill, split between internal and external resources —
+      smoothed evenly across the project's ${months.length||"—"} month(s) by default; edit any month below to
+      override it, the remaining total then re-balances automatically across the other months. A planned figure in
+      red exceeds the matching team/skill's available capacity that month ("—" = no team/skill target assigned yet
+      for that skill, see below).</p>
+      ${workloadBlocks || `<p class="muted">No workload line yet.</p>`}
+      <div class="actions" style="margin-top:10px">
+        <input id="wl-skill" list="wl-skill-dl" placeholder="Skill" style="max-width:180px">
+        <datalist id="wl-skill-dl">${wSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
+        <input type="number" id="wl-internal" min="0" step="0.5" placeholder="Internal days" style="max-width:120px">
+        <input type="number" id="wl-external" min="0" step="0.5" placeholder="External days" style="max-width:120px">
+        <button class="btn small" id="btn-add-workload">Add line</button>
+        <button class="btn small ok" id="btn-save-workloads">💾 Save workload changes</button>
+      </div>
+
+      <h3 style="margin-top:20px">Team / skill targets</h3>
       <table>
         <tr><th>Team</th><th>Skill</th><th></th></tr>
         ${targetsRows || `<tr><td colspan="3" class="muted">No target yet.</td></tr>`}
@@ -1552,10 +1631,13 @@ function viewProjects(){
         <datalist id="tgt-skill-dl">${tSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
         <button class="btn small" id="btn-add-target">Add a target</button>
       </div>
-      <p class="muted" style="margin-top:6px">A project can target several teams and/or skills; each
-      target can then be bulk-allocated below.</p>
+      <p class="muted" style="margin-top:6px">Assigning a team/skill target here is what lets the workload above
+      compare itself to real, available capacity. A project can target several teams and/or skills.</p>
 
-      <h3 style="margin-top:20px">People allocated</h3>
+      <h3 style="margin-top:20px">People allocated <span class="muted" style="font-weight:400">(${y})</span></h3>
+      <div class="actions" style="margin-bottom:8px">
+        <button class="btn small secondary" id="proj-prev">◀</button><b>${y}</b><button class="btn small secondary" id="proj-next">▶</button>
+      </div>
       ${allocated.length? `<div class="calwrap"><table class="cal">
         <tr><th class="person">Person</th>${[...Array(12)].map((_,m)=>`<th>${monthName(y,m,true)}</th>`).join("")}<th></th></tr>
         ${rows}
@@ -1567,9 +1649,9 @@ function viewProjects(){
         <button class="btn small" id="proj-add-person" ${addable.length?"":"disabled"}>Add person</button>
         <button class="btn small ok" id="btn-save-alloc" ${allocated.length?"":"disabled"}>💾 Save allocations</button>
       </div>
-      <p class="muted" style="margin-top:8px">Allocation as a % of the person's time, month by month — useful for
-      cross-functional people spread across several projects, including from outside the targeted teams. Blank = 0%.
-      Remaining capacity (Capacity plan tab) deducts these allocations.</p>
+      <p class="muted" style="margin-top:8px">Allocation as a % of the person's time, month by month — useful to
+      force a specific person (e.g. cross-functional) onto this project; that then reduces their capacity available
+      for the team's other projects. Blank = 0%. Remaining capacity (Capacity plan tab) deducts these allocations.</p>
       ${overloads.length? `<div class="notice err" style="margin-top:8px"><b>Overallocation (&gt;100% across all projects):</b><br>${overloads.map(esc).join("<br>")}</div>`:""}
 
       <h3 style="margin-top:20px">Bulk allocation — a whole team/skill target</h3>
@@ -1582,32 +1664,14 @@ function viewProjects(){
         <span class="muted">%</span> <input type="number" id="bulk-pct" min="0" max="100" step="5" value="20" style="width:70px">
         <button class="btn small" id="btn-bulk-alloc">Allocate the group</button>
       </div>` : `<p class="muted">Add at least one team/skill target above to bulk-allocate a whole group.</p>`}
-
-      <h3 style="margin-top:20px">Workload &amp; deadlines (capacity projection)</h3>
-      <p class="muted">For each skill, enter the remaining workload (in person-days) and the desired due date:
-      the app compares the capacity already planned on this project by that date against the work still to do,
-      to check whether the deadline is achievable at the current allocation pace.</p>
-      ${(pr.workloads||[]).length? `<div style="overflow-x:auto"><table>
-        <tr><th>Skill</th><th>Remaining workload (person-days)</th><th>Due date</th><th>Planned capacity</th>
-            <th>Required pace</th><th>Planned pace</th><th>Verdict</th><th></th></tr>
-        ${workloadRows}
-      </table></div>` : `<p class="muted">No workload line yet.</p>`}
-      <div class="actions" style="margin-top:8px">
-        <input id="wl-skill" list="wl-skill-dl" placeholder="Skill" style="max-width:180px">
-        <datalist id="wl-skill-dl">${wSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
-        <input type="number" id="wl-days" min="0" step="0.5" placeholder="Remaining workload (person-days)" style="max-width:170px">
-        <input type="date" id="wl-due" style="max-width:160px">
-        <button class="btn small" id="btn-add-workload">Add line</button>
-        <button class="btn small ok" id="btn-save-workloads" ${(pr.workloads||[]).length?"":"disabled"}>💾 Save workloads</button>
-      </div>
     </div>`;
   }
 
   return `
   <div class="card">
     <h2>📁 Projects</h2>
-    <p class="muted" style="margin-bottom:10px">A project can target several teams and/or skills;
-    allocations can nonetheless include people from other teams (cross-functional).</p>
+    <p class="muted" style="margin-bottom:10px">Create a project with its dates and Triskell code, then define its
+    expected workload by skill and assign it to one or more team/skill targets.</p>
     ${listHtml}
     ${createHtml}
   </div>
@@ -1690,6 +1754,8 @@ function viewTeam(){
     <div class="actions" style="margin-bottom:10px">
       <h2 style="margin:0">👥 Teams &amp; balances — ${y}</h2>
       <select id="team-filter" style="max-width:220px">${teamOptions(teamViewFilter,true)}</select>
+      <button class="btn small secondary" id="team-expand-all">Expand all</button>
+      <button class="btn small secondary" id="team-collapse-all">Collapse all</button>
     </div>
     <div style="overflow-x:auto"><table>
       <tr><th>Person</th><th>Location</th><th>Contract</th>
@@ -1930,6 +1996,10 @@ function bindAfterRender(){
   bindForm("nf", isAdmin());
   bindForm("af", true);
   document.querySelectorAll("[data-teamtoggle]").forEach(b=>b.onclick=()=>{ toggleTeam(b.dataset.teamtoggle); render(); });
+  if(q("cal-expand-all")) q("cal-expand-all").onclick = ()=>{ expandAllTeams(); render(); };
+  if(q("cal-collapse-all")) q("cal-collapse-all").onclick = ()=>{ collapseAllTeams(); render(); };
+  if(q("team-expand-all")) q("team-expand-all").onclick = ()=>{ expandAllTeams(); render(); };
+  if(q("team-collapse-all")) q("team-collapse-all").onclick = ()=>{ collapseAllTeams(); render(); };
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.del));
   document.querySelectorAll("[data-recur-cancel]").forEach(b=>b.onclick=()=>removeRecurrence(b.dataset.recurCancel));
   document.querySelectorAll("[data-approve]").forEach(b=>b.onclick=()=>decide(b.dataset.approve,"approved"));
@@ -1948,21 +2018,19 @@ function bindAfterRender(){
   if(q("capa-smooth")) q("capa-smooth").onchange = e=>{ capSmooth=e.target.checked; render(); };
 
   /* Projects (project manager) */
-  if(q("proj-new-team")) q("proj-new-team").onchange = e=>{
-    const dl = q("proj-skill-dl");
-    if(dl) dl.innerHTML = teamSkills(e.target.value).map(s=>`<option value="${esc(s)}">`).join("");
-  };
   if(q("btn-add-proj")) q("btn-add-proj").onclick = async ()=>{
     if(!isCdp()) return;
     const name = q("proj-new-name").value.trim();
     if(!name) return;
-    const p = {id:uid(), name,
-               targets:[{teamId:q("proj-new-team").value, skill:q("proj-new-skill").value.trim()}],
-               active:true, allocations:{}, workloads:[],
+    const startDate = q("proj-new-start").value, endDate = q("proj-new-end").value;
+    if(!startDate || !endDate) return alert("Choose a start and end date.");
+    if(endDate<startDate) return alert("The end date must be after the start date.");
+    const p = {id:uid(), name, startDate, endDate, triskellCode:q("proj-new-triskell").value.trim(),
+               targets:[], active:true, allocations:{}, workloads:[],
                createdBy:currentUser.id, createdAt:new Date().toISOString()};
     await store.saveProject(p);
     projects.push(p); projSel = p.id;
-    toast("Project created ✓ — add more targets, allocate people and set the remaining workload"); render();
+    toast("Project created ✓ — define its expected workload, then assign it to team/skill targets"); render();
   };
   document.querySelectorAll("[data-popen]").forEach(b=>b.onclick=()=>{ projSel=b.dataset.popen; render(); });
   document.querySelectorAll("[data-pdel-proj]").forEach(b=>b.onclick=async ()=>{
@@ -2044,36 +2112,61 @@ function bindAfterRender(){
     pr.targets.splice(parseInt(b.dataset.tgtdel),1);
     await store.saveProject(pr); render();
   });
+  if(q("btn-save-proj-info")) q("btn-save-proj-info").onclick = async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    const startDate = q("proj-start").value, endDate = q("proj-end").value;
+    if(!startDate || !endDate) return alert("Choose a start and end date.");
+    if(endDate<startDate) return alert("The end date must be after the start date.");
+    pr.startDate = startDate; pr.endDate = endDate; pr.triskellCode = q("proj-triskell").value.trim();
+    await store.saveProject(pr);
+    toast("Project info saved ✓"); render();
+  };
   if(q("btn-add-workload")) q("btn-add-workload").onclick = async ()=>{
     if(!isCdp()) return;
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
     const skill = q("wl-skill").value.trim();
-    const days = Math.max(0, parseFloat(q("wl-days").value)||0);
-    const due = q("wl-due").value;
-    if(!due) return alert("Choose a desired due date.");
+    if(!skill) return alert("Enter a skill.");
+    const internalDays = Math.max(0, parseFloat(q("wl-internal").value)||0);
+    const externalDays = Math.max(0, parseFloat(q("wl-external").value)||0);
     pr.workloads = pr.workloads||[];
-    pr.workloads.push({skill, remainingDays:days, dueDate:due});
+    pr.workloads.push({id:uid(), skill, internalDays, externalDays, monthlyOverride:{}});
     await store.saveProject(pr);
     toast("Workload line added ✓"); render();
   };
+  document.querySelectorAll("[data-wlmonth]").forEach(inp=>inp.addEventListener("input", ()=>{ inp.dataset.touched="1"; }));
   if(q("btn-save-workloads")) q("btn-save-workloads").onclick = async ()=>{
     if(!isCdp()) return;
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
-    document.querySelectorAll("[data-wldays]").forEach(inp=>{
-      const i = parseInt(inp.dataset.wldays);
-      if(pr.workloads[i]) pr.workloads[i].remainingDays = Math.max(0, parseFloat(inp.value)||0);
+    document.querySelectorAll("[data-wltotal]").forEach(inp=>{
+      const [wid,kind] = inp.dataset.wltotal.split("|");
+      const w = (pr.workloads||[]).find(x=>x.id===wid); if(!w) return;
+      const v = Math.max(0, parseFloat(inp.value)||0);
+      if(kind==="internal") w.internalDays = v; else w.externalDays = v;
     });
-    document.querySelectorAll("[data-wldue]").forEach(inp=>{
-      const i = parseInt(inp.dataset.wldue);
-      if(pr.workloads[i] && inp.value) pr.workloads[i].dueDate = inp.value;
+    document.querySelectorAll("[data-wlmonth]").forEach(inp=>{
+      if(inp.dataset.touched!=="1") return;
+      const [wid,key,kind] = inp.dataset.wlmonth.split("|");
+      const w = (pr.workloads||[]).find(x=>x.id===wid); if(!w) return;
+      w.monthlyOverride = w.monthlyOverride||{};
+      w.monthlyOverride[key] = w.monthlyOverride[key]||{};
+      w.monthlyOverride[key][kind] = Math.max(0, parseFloat(inp.value)||0);
     });
     await store.saveProject(pr);
     toast("Workloads saved ✓"); render();
   };
+  document.querySelectorAll("[data-wlreset]").forEach(b=>b.onclick=async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    const w = (pr.workloads||[]).find(x=>x.id===b.dataset.wlreset); if(!w) return;
+    w.monthlyOverride = {};
+    await store.saveProject(pr);
+    toast("Reset to even split ✓"); render();
+  });
   document.querySelectorAll("[data-wldel]").forEach(b=>b.onclick=async ()=>{
     if(!isCdp()) return;
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
-    pr.workloads.splice(parseInt(b.dataset.wldel),1);
+    pr.workloads = (pr.workloads||[]).filter(w=>w.id!==b.dataset.wldel);
     await store.saveProject(pr); render();
   });
   if(q("team-filter")) q("team-filter").onchange = e=>{ teamViewFilter=e.target.value; render(); };
