@@ -70,12 +70,24 @@ Les jours sont décomptés en **jours ouvrés selon le lieu de la personne** :
 un 14 juillet est férié pour Paris mais ouvré pour Kuala Lumpur, et
 inversement pour le Federal Territory Day.
 
-Les **administrateurs** ont en plus :
-- **Validation** : valider/refuser les demandes (avec motif) ;
-- **Équipes & soldes** : soldes et capacité de tous (filtre par équipe),
-  saisie d'une absence pour un tiers (auto-validée), export CSV ;
-- **Paramètres** : personnes (login Windows, rôle, équipe, lieu, contrat,
-  droits, cible), équipes, lieux et jours fériés.
+### Profils (cumulables)
+
+Chaque personne peut cumuler plusieurs profils, gérés par les admins dans
+Paramètres → Personnes :
+
+- **Standard** (implicite, tout le monde) : poser/annuler ses propres
+  demandes, voir le calendrier d'équipe ;
+- **Admin** : valider/refuser les demandes (onglet Validation), saisir pour
+  un tiers, gérer personnes/équipes/lieux/fériés (onglets Équipes & soldes
+  et Paramètres), export CSV ;
+- **Chef de projet** : onglet **Capacity plan** (capacité disponible en
+  jours-personnes, par équipe ou par personne, mois par mois — jours ouvrés
+  du lieu moins absences validées, option pour déduire aussi les demandes
+  en attente) et onglet **Projets** (en construction : affectation des
+  personnes aux projets et confrontation charge/capacité).
+
+Un chef de projet non admin ne peut pas valider de congés ; un admin non
+chef de projet ne voit pas le capacity plan.
 
 ### Internes / externes
 

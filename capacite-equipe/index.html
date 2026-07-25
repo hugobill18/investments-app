@@ -20,6 +20,7 @@
   .badge{display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600;}
   .badge.admin{background:#f59e0b; color:#111;}
   .badge.user{background:#374151; color:#e5e7eb;}
+  .badge.cdp{background:#0e7490; color:#fff;}
   .badge.interne{background:#dbeafe; color:#1e40af;}
   .badge.externe{background:#fce7f3; color:#9d174d;}
   nav{background:#fff; border-bottom:1px solid var(--border); padding:0 20px; display:flex; gap:4px; flex-wrap:wrap;}
@@ -172,6 +173,9 @@ const TYPES = {
 };
 const STATUS = {pending:"En attente", approved:"Validé", rejected:"Refusé"};
 const CONTRACTS = {interne:{label:"Interne", target:206}, externe:{label:"Externe", target:210}};
+/* Profils cumulables. Tout le monde a le profil « standard » implicite
+   (poser/annuler ses congés, voir le planning d'équipe). */
+const PROFILES = {admin:"Administrateur", cdp:"Chef de projet"};
 
 /* ---------- Utilitaires dates ---------- */
 const pad = n => String(n).padStart(2,"0");
@@ -305,7 +309,7 @@ const DEFAULT_ORG = [
     ["Ghaith","externe","Lisbonne"]]},
   {team:"Transversal", members:[
     ["Jerome","interne","Paris"], ["Walid","interne","Paris"], ["Youssef","interne","Paris"],
-    ["Firas","interne","Paris"], ["Jeremy","interne","Paris","admin"]]},
+    ["Firas","interne","Paris"], ["Jeremy","interne","Paris",["admin","cdp"]]]},
 ];
 function buildDefaultConfig(){
   const y = new Date().getFullYear();
@@ -318,14 +322,14 @@ function buildDefaultConfig(){
   DEFAULT_ORG.forEach((def,ti)=>{
     const t = {id:"t"+ti+"-"+uid(), name:def.team};
     teams.push(t);
-    for(const [name,contract,locName,role] of def.members){
+    for(const [name,contract,locName,roles] of def.members){
       people.push({id:uid()+Math.random().toString(36).slice(2,5), name, winLogin:"",
-        role:role||"user", teamId:t.id, locationId:locByName[locName], contract,
+        roles:roles||[], teamId:t.id, locationId:locByName[locName], contract,
         target:CONTRACTS[contract].target,
         cp:contract==="interne"?25:0, rtt:contract==="interne"?10:0, active:true});
     }
   });
-  return {version:2, teams, locations, people, holidays};
+  return {version:3, teams, locations, people, holidays};
 }
 
 /* ---------- État global ---------- */
@@ -334,14 +338,18 @@ let requests = [];
 let currentUser = null;
 let currentTab = "me";
 let calYear, calMonth, calTeam = "all", teamViewFilter = "all", settingsLoc = null;
+let capYear, capTeam = "all", capPending = false;
 const now = new Date();
 calYear = now.getFullYear(); calMonth = now.getMonth();
+capYear = now.getFullYear();
 const DETECTED_LOGIN = (new URLSearchParams(location.search).get("login")||"").trim();
 
 const personById = id => (config?.people||[]).find(p=>p.id===id);
 const teamById = id => (config?.teams||[]).find(t=>t.id===id);
 const locById = id => (config?.locations||[]).find(l=>l.id===id);
-const isAdmin = () => currentUser?.role === "admin";
+const hasProfile = (p, prof) => (p?.roles||[]).includes(prof);
+const isAdmin = () => hasProfile(currentUser, "admin");
+const isCdp = () => hasProfile(currentUser, "cdp");
 const uid = () => Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
 const activePeople = () => config.people.filter(p=>p.active!==false);
 const contractTarget = p => p.target ?? CONTRACTS[p.contract||"interne"].target;
@@ -365,13 +373,16 @@ function openDaysSet(startIso, endIso, half, hs){
 function openDaysP(startIso, endIso, half, person){
   return openDaysSet(startIso, endIso, half, locHolidaySet(person.locationId));
 }
-function openDaysInYear(r, y, person){
-  const a = r.start < `${y}-01-01` ? `${y}-01-01` : r.start;
-  const b = r.end   > `${y}-12-31` ? `${y}-12-31` : r.end;
+function openDaysInRange(r, aIso, bIso, person){
+  const a = r.start < aIso ? aIso : r.start;
+  const b = r.end   > bIso ? bIso : r.end;
   if(a>b) return 0;
   const hs = locHolidaySet(person.locationId);
   if(a===r.start && b===r.end) return openDaysSet(r.start,r.end,r.half,hs);
   return openDaysSet(a,b,null,hs);
+}
+function openDaysInYear(r, y, person){
+  return openDaysInRange(r, `${y}-01-01`, `${y}-12-31`, person);
 }
 function businessDaysYear(locId, y){
   return openDaysSet(`${y}-01-01`, `${y}-12-31`, null, locHolidaySet(locId));
@@ -436,22 +447,30 @@ const store = {
   },
 };
 
-/* Migration des données v1 (mono-équipe, fériés globaux) vers v2 */
+/* Migrations : v1 (mono-équipe) -> v2 (équipes/lieux) -> v3 (profils cumulables) */
 function migrate(cfg){
   if(!cfg) return cfg;
-  if(cfg.version>=2) return cfg;
-  cfg.teams = cfg.teams || [{id:"t-"+uid(), name:"Équipe 1"}];
-  cfg.locations = cfg.locations || [{id:"l-"+uid(), name:"Paris", gen:"FR"}];
-  const defLoc = cfg.locations[0].id, defTeam = cfg.teams[0].id;
-  cfg.holidays = (cfg.holidays||[]).map(h=>h.locationId?h:{...h, locationId:defLoc});
-  for(const p of cfg.people||[]){
-    if(p.teamId===undefined) p.teamId = defTeam;
-    if(p.locationId===undefined) p.locationId = defLoc;
-    if(p.contract===undefined) p.contract = "interne";
-    if(p.target===undefined) p.target = CONTRACTS[p.contract].target;
-    if(p.winLogin===undefined) p.winLogin = "";
+  if(cfg.version===undefined || cfg.version<2){
+    cfg.teams = cfg.teams || [{id:"t-"+uid(), name:"Équipe 1"}];
+    cfg.locations = cfg.locations || [{id:"l-"+uid(), name:"Paris", gen:"FR"}];
+    const defLoc = cfg.locations[0].id, defTeam = cfg.teams[0].id;
+    cfg.holidays = (cfg.holidays||[]).map(h=>h.locationId?h:{...h, locationId:defLoc});
+    for(const p of cfg.people||[]){
+      if(p.teamId===undefined) p.teamId = defTeam;
+      if(p.locationId===undefined) p.locationId = defLoc;
+      if(p.contract===undefined) p.contract = "interne";
+      if(p.target===undefined) p.target = CONTRACTS[p.contract].target;
+      if(p.winLogin===undefined) p.winLogin = "";
+    }
+    cfg.version = 2;
   }
-  cfg.version = 2;
+  if(cfg.version<3){
+    for(const p of cfg.people||[]){
+      if(!Array.isArray(p.roles)) p.roles = p.role==="admin" ? ["admin"] : [];
+      delete p.role;
+    }
+    cfg.version = 3;
+  }
   return cfg;
 }
 
@@ -537,10 +556,11 @@ function showSetup(){
     let me = config.people.find(p=>norm(p.name)===norm(name))
           || config.people.find(p=>norm(p.name).startsWith(norm(name)) || norm(name).startsWith(norm(p.name)));
     if(me){
-      me.role = "admin"; me.winLogin = winLogin;
+      if(!me.roles.includes("admin")) me.roles.push("admin");
+      me.winLogin = winLogin;
       if(me.contract==="interne"){ me.cp = cp; me.rtt = rtt; }
     }else{
-      me = {id:uid(), name, winLogin, role:"admin",
+      me = {id:uid(), name, winLogin, roles:["admin"],
         teamId:config.teams[config.teams.length-1].id, locationId:config.locations[0].id,
         contract:"interne", target:CONTRACTS.interne.target, cp, rtt, active:true};
       config.people.push(me);
@@ -588,9 +608,11 @@ function showLogin(forceManual){
 function startApp(){
   document.getElementById("ov-login").classList.add("hidden");
   const team = teamById(currentUser.teamId), loc = locById(currentUser.locationId);
+  const badges = (currentUser.roles||[]).map(r=>
+    `<span class="badge ${r==="admin"?"admin":"cdp"}">${PROFILES[r]||r}</span>`).join(" ")
+    || '<span class="badge user">Membre</span>';
   document.getElementById("who").innerHTML =
-    `Connecté : <b>${esc(currentUser.name)}</b> <span class="muted">(${esc(team?.name||"—")} · ${esc(loc?.name||"—")})</span>
-     <span class="badge ${currentUser.role}">${currentUser.role==="admin"?"Administrateur":"Membre"}</span>`;
+    `Connecté : <b>${esc(currentUser.name)}</b> <span class="muted">(${esc(team?.name||"—")} · ${esc(loc?.name||"—")})</span> ${badges}`;
   document.getElementById("mode-indicator").textContent =
     store.mode==="fs" ? `Dossier : ${store.dir.name}` : "⚠ MODE DÉMO — données locales à ce PC";
   renderTabs(); render();
@@ -692,6 +714,10 @@ function renderTabs(){
     {id:"me",   label:"Mon espace"},
     {id:"cal",  label:"Calendrier équipe"},
   ];
+  if(isCdp()){
+    tabs.push({id:"capa", label:"Capacity plan"});
+    tabs.push({id:"proj", label:"Projets"});
+  }
   if(isAdmin()){
     const pend = requests.filter(r=>r.status==="pending").length;
     tabs.push({id:"valid", label:"Validation"+(pend?` (${pend})`:"")});
@@ -708,6 +734,8 @@ function render(){
   const m = document.getElementById("main");
   if(currentTab==="me") m.innerHTML = viewMe();
   else if(currentTab==="cal") m.innerHTML = viewCalendar();
+  else if(currentTab==="capa" && isCdp()) m.innerHTML = viewCapacity();
+  else if(currentTab==="proj" && isCdp()) m.innerHTML = viewProjects();
   else if(currentTab==="valid" && isAdmin()) m.innerHTML = viewValidation();
   else if(currentTab==="team" && isAdmin()) m.innerHTML = viewTeam();
   else if(currentTab==="settings" && isAdmin()) m.innerHTML = viewSettings();
@@ -870,6 +898,88 @@ function viewCalendar(){
   </div>`;
 }
 
+/* ---------- Vue : Capacity plan (chef de projet) ---------- */
+function personMonthCapacity(p, y, m, includePending){
+  const a = iso(new Date(y,m,1)), b = iso(new Date(y,m+1,0));
+  let cap = openDaysSet(a, b, null, locHolidaySet(p.locationId));
+  for(const r of requests){
+    if(r.personId!==p.id || !TYPES[r.type].absent) continue;
+    if(r.status==="approved" || (includePending && r.status==="pending"))
+      cap -= openDaysInRange(r, a, b, p);
+  }
+  return cap;
+}
+function fmtDays(n){ return Number.isInteger(n) ? n : n.toFixed(1); }
+function viewCapacity(){
+  const y = capYear;
+  const curM = (y===now.getFullYear()) ? now.getMonth() : -1;
+  const mNames = [...Array(12)].map((_,m)=>new Date(y,m,1).toLocaleDateString("fr-FR",{month:"short"}));
+  const head = `<tr><th class="person">${capTeam==="all"?"Équipe":"Personne"}</th>
+    ${mNames.map((n,m)=>`<th ${m===curM?'style="background:#dbeafe"':''}>${n}</th>`).join("")}<th>Année</th></tr>`;
+
+  let rows = [];
+  const totals = Array(12).fill(0);
+  const mkRow = (label, sub, vals, strong)=>{
+    const sum = vals.reduce((s,v)=>s+v,0);
+    return `<tr${strong?' class="caprow"':''}><td class="person">${esc(label)}${sub?`<br><span class="sub">${esc(sub)}</span>`:""}</td>
+      ${vals.map((v,m)=>`<td${m===curM?' style="background:#eff6ff"':''}>${fmtDays(v)}</td>`).join("")}
+      <td><b>${fmtDays(sum)}</b></td></tr>`;
+  };
+  if(capTeam==="all"){
+    for(const t of config.teams){
+      const members = activePeople().filter(p=>p.teamId===t.id);
+      if(!members.length) continue;
+      const vals = [...Array(12)].map((_,m)=>
+        members.reduce((s,p)=>s+personMonthCapacity(p,y,m,capPending),0));
+      vals.forEach((v,m)=>totals[m]+=v);
+      rows.push(mkRow(t.name, members.length+" pers.", vals));
+    }
+  }else{
+    const members = activePeople().filter(p=>p.teamId===capTeam)
+      .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+    for(const p of members){
+      const vals = [...Array(12)].map((_,m)=>personMonthCapacity(p,y,m,capPending));
+      vals.forEach((v,m)=>totals[m]+=v);
+      rows.push(mkRow(p.name, `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}`, vals));
+    }
+  }
+  rows.push(mkRow("Total", null, totals, true));
+  return `
+  <div class="card">
+    <div class="actions" style="margin-bottom:12px">
+      <button class="btn small secondary" id="capa-prev">◀</button>
+      <b style="min-width:60px; text-align:center">${y}</b>
+      <button class="btn small secondary" id="capa-next">▶</button>
+      <select id="capa-team" style="max-width:240px">${teamOptions(capTeam,true)}</select>
+      <label style="display:inline; margin:0"><input type="checkbox" id="capa-pending" ${capPending?"checked":""}> Déduire aussi les demandes en attente</label>
+    </div>
+    <div class="calwrap">
+      <table class="cal">${head}${rows.join("")}</table>
+    </div>
+    <p class="muted" style="margin-top:10px">Capacité en jours-personnes : jours ouvrés du mois selon le lieu de chacun
+    (week-ends et fériés locaux exclus) moins les absences validées${capPending?" et en attente":""}.
+    Le télétravail n'est pas déduit (jours travaillés). Sélectionnez une équipe pour le détail par personne.
+    L'onglet Projets permettra d'y confronter la charge planifiée.</p>
+  </div>`;
+}
+
+/* ---------- Vue : Projets (chef de projet) — à construire ---------- */
+function viewProjects(){
+  return `
+  <div class="card">
+    <h2>📁 Projets — en construction</h2>
+    <p style="margin-bottom:10px">Cet onglet, réservé au profil Chef de projet, permettra d'ajuster le capacity plan :</p>
+    <ul style="padding-left:20px; line-height:1.9">
+      <li>créer des projets et leur période ;</li>
+      <li>affecter des personnes à un projet (en % de temps ou en jours par mois) ;</li>
+      <li>comparer la charge planifiée à la capacité disponible (onglet Capacity plan) ;</li>
+      <li>signaler les surcharges et les périodes de sous-utilisation.</li>
+    </ul>
+    <p class="muted" style="margin-top:10px">En attendant, l'onglet Capacity plan donne déjà la capacité disponible
+    par équipe et par personne, mois par mois.</p>
+  </div>`;
+}
+
 /* ---------- Vue : Validation (admin) ---------- */
 function viewValidation(){
   const pend = requests.filter(r=>r.status==="pending").sort((a,b)=>a.start.localeCompare(b.start));
@@ -935,7 +1045,9 @@ function viewTeam(){
         const b = balances(p,y);
         const ext = (p.contract||"interne")==="externe";
         const target = contractTarget(p);
-        return `<tr><td><b>${esc(p.name)}</b> ${p.role==="admin"?'<span class="badge admin">Admin</span>':""}</td>
+        return `<tr><td><b>${esc(p.name)}</b>
+          ${(p.roles||[]).includes("admin")?'<span class="badge admin">Admin</span>':""}
+          ${(p.roles||[]).includes("cdp")?'<span class="badge cdp">CdP</span>':""}</td>
           <td>${esc(teamById(p.teamId)?.name||"—")}</td>
           <td>${esc(locById(p.locationId)?.name||"—")}</td>
           <td><span class="badge ${p.contract||"interne"}">${CONTRACTS[p.contract||"interne"].label}</span></td>
@@ -970,12 +1082,15 @@ function viewSettings(){
   <div class="card">
     <h2>👤 Personnes</h2>
     <div style="overflow-x:auto"><table>
-      <tr><th>Nom</th><th>Login Windows</th><th>Rôle</th><th>Équipe</th><th>Lieu</th><th>Contrat</th>
+      <tr><th>Nom</th><th>Login Windows</th><th>Profils</th><th>Équipe</th><th>Lieu</th><th>Contrat</th>
           <th>CP/an</th><th>RTT/an</th><th>Cible j.</th><th>Actif</th><th></th></tr>
       ${people.map(p=>`<tr>
         <td><input style="min-width:130px" data-pname="${p.id}" value="${esc(p.name)}"></td>
         <td><input style="min-width:90px" data-plogin="${p.id}" value="${esc(p.winLogin||"")}" placeholder="login"></td>
-        <td><select data-prole="${p.id}"><option value="user" ${p.role==="user"?"selected":""}>Membre</option><option value="admin" ${p.role==="admin"?"selected":""}>Admin</option></select></td>
+        <td style="white-space:nowrap">
+          <label style="display:inline; margin:0; font-size:12px"><input type="checkbox" data-padmin="${p.id}" ${(p.roles||[]).includes("admin")?"checked":""}> Admin</label><br>
+          <label style="display:inline; margin:0; font-size:12px"><input type="checkbox" data-pcdp="${p.id}" ${(p.roles||[]).includes("cdp")?"checked":""}> Chef de projet</label>
+        </td>
         <td><select data-pteam="${p.id}">${teamOptions(p.teamId,false)}</select></td>
         <td><select data-ploc="${p.id}">${locOptions(p.locationId)}</select></td>
         <td><select data-pcontract="${p.id}"><option value="interne" ${p.contract!=="externe"?"selected":""}>Interne</option><option value="externe" ${p.contract==="externe"?"selected":""}>Externe</option></select></td>
@@ -992,8 +1107,11 @@ function viewSettings(){
       <button class="btn small" id="btn-add-person">Ajouter</button>
       <button class="btn small ok" id="btn-save-people">💾 Enregistrer les modifications</button>
     </div>
-    <p class="muted" style="margin-top:8px">Le login Windows permet la connexion automatique via <b>Lancer.cmd</b>
-    (la casse est ignorée). Cible j. = jours travaillés attendus dans l'année (par défaut : interne ${CONTRACTS.interne.target}, externe ${CONTRACTS.externe.target}).
+    <p class="muted" style="margin-top:8px">Profils cumulables — sans case cochée, la personne a le profil
+    <b>standard</b> : poser/annuler ses propres demandes et voir le planning d'équipe. <b>Admin</b> ajoute la
+    validation des congés et la gestion des personnes/équipes/lieux ; <b>Chef de projet</b> ajoute le capacity
+    plan et l'onglet Projets. Le login Windows permet la connexion automatique via <b>Lancer.cmd</b> (casse ignorée).
+    Cible j. = jours travaillés attendus dans l'année (par défaut : interne ${CONTRACTS.interne.target}, externe ${CONTRACTS.externe.target}).
     « Désactiver » (décocher Actif) masque la personne sans perdre son historique.</p>
   </div>
 
@@ -1121,6 +1239,10 @@ function bindAfterRender(){
   if(q("cal-next")) q("cal-next").onclick = ()=>{ calMonth++; if(calMonth>11){calMonth=0;calYear++;} render(); };
   if(q("cal-today")) q("cal-today").onclick = ()=>{ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); render(); };
   if(q("cal-team")) q("cal-team").onchange = e=>{ calTeam=e.target.value; render(); };
+  if(q("capa-prev")) q("capa-prev").onclick = ()=>{ capYear--; render(); };
+  if(q("capa-next")) q("capa-next").onclick = ()=>{ capYear++; render(); };
+  if(q("capa-team")) q("capa-team").onchange = e=>{ capTeam=e.target.value; render(); };
+  if(q("capa-pending")) q("capa-pending").onchange = e=>{ capPending=e.target.checked; render(); };
   if(q("team-filter")) q("team-filter").onchange = e=>{ teamViewFilter=e.target.value; render(); };
   if(q("btn-export-csv")) q("btn-export-csv").onclick = exportCsv;
   if(q("btn-change-folder")) q("btn-change-folder").onclick = async ()=>{
@@ -1138,7 +1260,7 @@ function bindAfterRender(){
   if(q("btn-add-person")) q("btn-add-person").onclick = async ()=>{
     const name = q("np-name").value.trim();
     if(!name) return;
-    config.people.push({id:uid(), name, winLogin:q("np-login").value.trim(), role:"user",
+    config.people.push({id:uid(), name, winLogin:q("np-login").value.trim(), roles:[],
       teamId:config.teams[0].id, locationId:config.locations[0].id,
       contract:"interne", target:CONTRACTS.interne.target, cp:25, rtt:10, active:true});
     await store.saveConfig(config); toast("Membre ajouté ✓ — ajustez son équipe/lieu/contrat puis Enregistrer"); render();
@@ -1155,7 +1277,11 @@ function bindAfterRender(){
       const g = a=>val(a,p.id);
       if(g("pname") && g("pname").value.trim()) p.name = g("pname").value.trim();
       if(g("plogin")) p.winLogin = g("plogin").value.trim();
-      if(g("prole")) p.role = g("prole").value;
+      if(g("padmin") || g("pcdp")){
+        p.roles = [];
+        if(g("padmin")?.checked) p.roles.push("admin");
+        if(g("pcdp")?.checked) p.roles.push("cdp");
+      }
       if(g("pteam")) p.teamId = g("pteam").value;
       if(g("ploc")) p.locationId = g("ploc").value;
       if(g("pcontract")) p.contract = g("pcontract").value;
@@ -1164,7 +1290,7 @@ function bindAfterRender(){
       if(g("ptarget")) p.target = parseInt(g("ptarget").value)||CONTRACTS[p.contract].target;
       if(g("pactive")) p.active = g("pactive").checked;
     }
-    if(!config.people.some(p=>p.role==="admin" && p.active!==false))
+    if(!config.people.some(p=>(p.roles||[]).includes("admin") && p.active!==false))
       return alert("Impossible : il doit rester au moins un administrateur actif.");
     const logins = config.people.filter(p=>p.winLogin).map(p=>p.winLogin.toLowerCase());
     const dup = logins.find((l,i)=>logins.indexOf(l)!==i);
