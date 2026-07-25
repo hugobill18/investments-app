@@ -62,9 +62,10 @@ Chaque membre peut :
   jusqu'à validation par un administrateur ;
 - déclarer **télétravail, arrêt maladie ou absence imprévue** → enregistrés
   directement (faits constatés, pas de validation) ;
-- suivre ses **soldes** (internes : CP/RTT restants ; externes : jours
-  travaillés projetés vs cible), ses demandes et le **calendrier équipe**
-  (filtrable par équipe) avec la ligne « Disponibles » (capacité par jour).
+- suivre ses **soldes CP/RTT restants** (internes et externes, chacun avec
+  ses propres défauts), ses demandes et le **calendrier équipe** — regroupé
+  par équipe (avec un bandeau par équipe), filtrable pour n'en afficher
+  qu'une seule — avec la ligne « Disponibles » (capacité par jour).
 
 Les jours sont décomptés en **jours ouvrés selon le lieu de la personne** :
 un 14 juillet est férié pour Paris mais ouvré pour Kuala Lumpur, et
@@ -93,7 +94,8 @@ Paramètres → Personnes :
 - **Admin** : valider/refuser les demandes (onglet Validation), saisir pour
   un tiers (le champ « Personne » apparaît directement dans Mon espace,
   avec un rappel, ainsi que dans Équipes & soldes), gérer personnes/équipes/
-  lieux/fériés (onglets Équipes & soldes et Paramètres), export CSV ;
+  lieux/fériés (onglets **Équipes & soldes** — lui aussi regroupé par
+  équipe et filtrable — et Paramètres), export CSV ;
 - **Chef de projet** : onglets **Capacity plan** et **Projets**.
 
 Un chef de projet non admin ne peut pas valider de congés ; un admin non
@@ -118,12 +120,18 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   **en attente** apparaissent en orange (« −x ? ») mais n'impactent la
   capacité qu'une fois validés. Une valeur négative (rouge) = surcharge.
 - Le télétravail n'est pas déduit (jours travaillés).
-- **Simulation CP/RTT restants** (case à cocher, activée par défaut) : pour
-  chaque interne, le solde CP+RTT non encore posé est réparti uniformément
-  sur les mois restants de l'année (annotation violette « ~x » sous la
-  valeur, déjà déduite) — une projection indicative pour anticiper la prise
-  de congés à venir, pas une réservation réelle. Décocher la case revient
-  aux seules absences actées.
+- **Simulation de congés restants** (case à cocher, activée par défaut),
+  répartie uniformément sur les mois restants de l'année (annotation
+  violette « ~x » sous la valeur, déjà déduite) — méthode différente selon
+  le contrat :
+  - **Interne** : le solde CP+RTT non encore posé.
+  - **Externe** : pas de solde de référence à lisser directement — le calcul
+    part de sa cible de jours travaillés (ex. 210/an) : jours ouvrés de
+    l'année − cible − ce qu'il a déjà posé = combien de jours de congé il
+    peut encore poser tout en tenant sa cible, réparti sur les mois restants.
+  C'est une projection indicative pour anticiper la prise de congés à venir,
+  pas une réservation réelle. Décocher la case revient aux seules absences
+  actées.
 
 ### Projets & affectations (profil Chef de projet)
 
@@ -160,10 +168,14 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
 
 ### Internes / externes
 
-- **Interne** : droits CP et RTT décomptés, cible par défaut **206** jours
-  travaillés/an.
-- **Externe** : pas de solde CP/RTT (non applicable), cible par défaut
-  **210** jours travaillés/an.
+- **Interne** : par défaut **31 CP** et **14 RTT** par an, cible par défaut
+  **206** jours travaillés/an.
+- **Externe** : par défaut **28 CP** et **10 RTT** par an, cible par défaut
+  **210** jours travaillés/an. Contrairement à une version précédente, les
+  externes ont bien des soldes CP/RTT suivis comme les internes.
+- Ces valeurs par défaut ne s'appliquent qu'à la création d'une personne
+  (ou en changeant son contrat tant que les champs CP/RTT/cible sont restés
+  à l'un des deux défauts) — modifiables ensuite librement dans Paramètres.
 - La colonne « Projeté » = jours ouvrés de l'année selon le lieu − absences
   validées ; elle passe en rouge sous la cible. La cible est modifiable par
   personne.

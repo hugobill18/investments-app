@@ -70,6 +70,7 @@
   .legend .sw{display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:4px;}
   .pend-note{color:#b45309; font-size:10px; line-height:1.2; white-space:nowrap;}
   .smooth-note{color:#4a3aa7; font-size:10px; line-height:1.2; white-space:nowrap;}
+  tr.teamhead td{background:#eef1f5; font-weight:700; padding:6px 10px; border-top:2px solid var(--border);}
   .overlay{position:fixed; inset:0; background:rgba(17,24,39,.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px;}
   .overlay .box{background:#fff; border-radius:10px; padding:28px; max-width:540px; width:100%; max-height:92vh; overflow:auto;}
   .overlay .box h2{margin-bottom:8px; font-size:18px;}
@@ -132,8 +133,8 @@
     <label>Votre login Windows (pour la connexion automatique via Lancer.cmd)</label>
     <input id="setup-login" placeholder="ex : mdupont">
     <div class="formgrid">
-      <div><label>Congés payés / an (jours)</label><input id="setup-cp" type="number" value="25" min="0" step="0.5"></div>
-      <div><label>RTT / an (jours)</label><input id="setup-rtt" type="number" value="10" min="0" step="0.5"></div>
+      <div><label>Congés payés / an (jours)</label><input id="setup-cp" type="number" value="31" min="0" step="0.5"></div>
+      <div><label>RTT / an (jours)</label><input id="setup-rtt" type="number" value="14" min="0" step="0.5"></div>
     </div>
     <div style="margin-top:16px"><button class="btn" id="btn-setup-ok">Créer et démarrer</button></div>
     <div id="setup-error" class="notice err hidden" style="margin-top:10px"></div>
@@ -174,7 +175,10 @@ const TYPES = {
   SS:  {label:"Congé sans solde", hex:"#6b7280", needsApproval:true,  deducts:null,  absent:true},
 };
 const STATUS = {pending:"En attente", approved:"Validé", rejected:"Refusé"};
-const CONTRACTS = {interne:{label:"Interne", target:206}, externe:{label:"Externe", target:210}};
+const CONTRACTS = {
+  interne:{label:"Interne", target:206, cp:31, rtt:14},
+  externe:{label:"Externe", target:210, cp:28, rtt:10},
+};
 /* Profils cumulables. Tout le monde a le profil « standard » implicite
    (poser/annuler ses congés, voir le planning d'équipe). */
 const PROFILES = {admin:"Administrateur", cdp:"Chef de projet"};
@@ -364,7 +368,7 @@ function buildDefaultConfig(){
       people.push({id:uid()+Math.random().toString(36).slice(2,5), name, winLogin:"",
         roles:roles||[], skill:SKILL_BY_NAME[name]||"", teamId:t.id, locationId:locByName[locName], contract,
         target:CONTRACTS[contract].target,
-        cp:contract==="interne"?25:0, rtt:contract==="interne"?10:0, active:true});
+        cp:CONTRACTS[contract].cp, rtt:CONTRACTS[contract].rtt, active:true});
     }
   });
   return {version:5, teams, locations, people, holidays};
@@ -886,12 +890,10 @@ function viewMe(){
                        .sort((a,b)=>b.start.localeCompare(a.start));
   const ext = (currentUser.contract||"interne")==="externe";
   const target = contractTarget(currentUser);
-  const kpis = ext ? `
-    <div class="kpi"><div class="v" style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}">${b.projWorked}</div><div class="l">Jours travaillés projetés ${y} (cible ${target})</div></div>
-    <div class="kpi"><div class="v">${b.absentAll}</div><div class="l">Jours d'absence validés ${y}</div></div>
-  ` : `
+  const kpis = `
     <div class="kpi"><div class="v" style="color:var(--cp)">${b.cpLeft}</div><div class="l">CP restants ${y} (sur ${currentUser.cp||0})</div></div>
     <div class="kpi"><div class="v" style="color:var(--rtt)">${b.rttLeft}</div><div class="l">RTT restants ${y} (sur ${currentUser.rtt||0})</div></div>
+    ${ext?`<div class="kpi"><div class="v" style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}">${b.projWorked}</div><div class="l">Jours travaillés projetés ${y} (cible ${target})</div></div>`:""}
   `;
   return `
   <div class="kpis">
@@ -942,22 +944,29 @@ function viewCalendar(){
     const dt = new Date(y,m,d);
     daysHead.push(`<th>${"DLMMJVS"[dt.getDay()]}<br>${d}</th>`);
   }
-  const rows = people.map(p=>{
-    const hs = holByLoc[p.locationId] || new Set();
-    const cells=[];
-    for(let d=1; d<=nDays; d++){
-      const dt=new Date(y,m,d), dIso=iso(dt);
-      if(isWeekend(dt)){ cells.push(`<td class="we"></td>`); continue; }
-      if(hs.has(dIso)){ cells.push(`<td class="hol" title="${esc(locHolidayLabel(p.locationId,dIso)||'Férié')} (${esc(locById(p.locationId)?.name||'')})">F</td>`); continue; }
-      const r = dayInfo(p.id,dIso);
-      if(!r){ cells.push(`<td></td>`); continue; }
-      const t = TYPES[r.type];
-      const pend = r.status==="pending";
-      cells.push(`<td class="absent ${pend?'pending-cell':''}" style="background:${t.hex}"
-        title="${t.label}${pend?' (en attente)':''} — ${esc(personLabel(p))}">${r.type==="TT"?"T":r.type[0]}</td>`);
+  const teamsToShow = calTeam==="all" ? config.teams : config.teams.filter(t=>t.id===calTeam);
+  const rows = [];
+  for(const t of teamsToShow){
+    const members = people.filter(p=>p.teamId===t.id);
+    if(!members.length) continue;
+    rows.push(`<tr class="teamhead"><td colspan="${nDays+1}" style="border-left:4px solid ${teamColor(t.id)}">${esc(t.name)} <span class="muted">(${members.length} pers.)</span></td></tr>`);
+    for(const p of members){
+      const hs = holByLoc[p.locationId] || new Set();
+      const cells=[];
+      for(let d=1; d<=nDays; d++){
+        const dt=new Date(y,m,d), dIso=iso(dt);
+        if(isWeekend(dt)){ cells.push(`<td class="we"></td>`); continue; }
+        if(hs.has(dIso)){ cells.push(`<td class="hol" title="${esc(locHolidayLabel(p.locationId,dIso)||'Férié')} (${esc(locById(p.locationId)?.name||'')})">F</td>`); continue; }
+        const r = dayInfo(p.id,dIso);
+        if(!r){ cells.push(`<td></td>`); continue; }
+        const t2 = TYPES[r.type];
+        const pend = r.status==="pending";
+        cells.push(`<td class="absent ${pend?'pending-cell':''}" style="background:${t2.hex}"
+          title="${t2.label}${pend?' (en attente)':''} — ${esc(personLabel(p))}">${r.type==="TT"?"T":r.type[0]}</td>`);
+      }
+      rows.push(`<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(locById(p.locationId)?.name||"")} · ${esc(CONTRACTS[p.contract||"interne"].label)}</span></td>${cells.join("")}</tr>`);
     }
-    return `<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(locById(p.locationId)?.name||"")} · ${esc(CONTRACTS[p.contract||"interne"].label)}</span></td>${cells.join("")}</tr>`;
-  });
+  }
   const capCells=[];
   for(let d=1; d<=nDays; d++){
     const dt=new Date(y,m,d), dIso=iso(dt);
@@ -978,7 +987,7 @@ function viewCalendar(){
       <button class="btn small secondary" id="cal-next">▶</button>
       <button class="btn small secondary" id="cal-today">Aujourd'hui</button>
       <select id="cal-team" style="max-width:220px">${teamOptions(calTeam,true)}</select>
-      <span class="muted">Effectif affiché : ${people.length} — cases estompées = en attente. Les fériés (F) dépendent du lieu de chacun.</span>
+      <span class="muted">Effectif affiché : ${people.length}, regroupé par équipe — cases estompées = en attente. Les fériés (F) dépendent du lieu de chacun.</span>
     </div>
     <div class="calwrap">
       <table class="cal">
@@ -1020,11 +1029,16 @@ function personMonthAllocPct(p,y,m){
   }
   return pct;
 }
-/* Simulation : lisse les CP/RTT restants (interne uniquement) sur les mois
-   restants de l'année pour projeter leur future prise. Année passée -> 0 ;
-   année en cours -> à partir du mois courant ; année future -> dès janvier. */
+/* Simulation : lisse la prise de congés restante sur les mois restants de
+   l'année pour la projeter. Année passée -> 0 ; année en cours -> à partir
+   du mois courant ; année future -> dès janvier.
+   - Interne : solde CP+RTT restant, réparti uniformément.
+   - Externe : pas de solde de référence — on part de la cible de jours
+     travaillés (ex. 210/an). Le nombre de jours de congé "autorisés" sur
+     l'année = jours ouvrés de l'année − cible ; on en retranche ceux déjà
+     posés (validés), et on répartit le reste sur les mois restants, pour
+     estimer combien de jours il lui reste à poser tout en tenant sa cible. */
 function personMonthSmoothLeave(p,y,m){
-  if((p.contract||"interne")!=="interne") return 0;
   const todayY=now.getFullYear(), todayM=now.getMonth();
   if(y<todayY) return 0;
   const startMonth = y===todayY ? todayM : 0;
@@ -1032,7 +1046,13 @@ function personMonthSmoothLeave(p,y,m){
   const remainingMonths = 12-startMonth;
   if(remainingMonths<=0) return 0;
   const b = balances(p,y);
-  const remaining = Math.max(0,(b.cpLeft||0)) + Math.max(0,(b.rttLeft||0));
+  let remaining;
+  if((p.contract||"interne")==="interne"){
+    remaining = Math.max(0,(b.cpLeft||0)) + Math.max(0,(b.rttLeft||0));
+  }else{
+    const target = contractTarget(p);
+    remaining = Math.max(0, (b.openYear-target) - (b.absentAll||0));
+  }
   return remaining/remainingMonths;
 }
 /* Capacité restante = jours ouvrés du lieu − absences VALIDÉES − affectations
@@ -1164,7 +1184,7 @@ function viewCapacity(){
         ${skills.map(s=>`<option value="${esc(s)}" ${capSkill===s?"selected":""}>${esc(s)}</option>`).join("")}
       </select>`:""}
       <label style="display:inline; margin:0"><input type="checkbox" id="capa-smooth" ${capSmooth?"checked":""}>
-        Simuler la prise des CP/RTT restants (lissée sur l'année)</label>
+        Simuler la prise de congés restante (lissée sur l'année)</label>
     </div>
     <h2>Capacité restante ${capTeam==="all"?"par équipe":"— "+esc(teamById(capTeam)?.name||"")} (jours-personnes)</h2>
     ${capacityChart(series, y)}
@@ -1174,11 +1194,13 @@ function viewCapacity(){
     </div>
     <p class="muted" style="margin-top:10px">Capacité restante = jours ouvrés du mois selon le lieu de chacun
     (week-ends et fériés locaux exclus) − absences <b>validées</b> − affectations projets (en % du mois, onglet Projets)
-    ${capSmooth?" − simulation des CP/RTT restants (voir « ~x » ci-dessous)":""}.
+    ${capSmooth?" − simulation de congés restants (voir « ~x » ci-dessous)":""}.
     Les congés en attente apparaissent en orange (« −x ? ») mais n'impactent la capacité qu'une fois validés.
-    ${capSmooth?`La simulation « ~x » répartit uniformément le solde CP+RTT restant de chaque interne sur les mois
-    restants de l'année, pour anticiper une prise de congés qui n'est pas encore posée — c'est une projection
-    indicative, pas une réservation réelle (décochez la case pour revenir aux seules absences actées).`:""}
+    ${capSmooth?`La simulation « ~x » répartit uniformément, sur les mois restants de l'année, une estimation des
+    congés encore à poser : pour un <b>interne</b>, son solde CP+RTT restant ; pour un <b>externe</b>, l'écart entre
+    les jours ouvrés de l'année et sa cible de jours travaillés, moins ce qu'il a déjà posé — de quoi estimer combien
+    de jours il peut encore poser tout en tenant sa cible. C'est une projection indicative, pas une réservation
+    réelle (décochez la case pour revenir aux seules absences actées).`:""}
     Le télétravail n'est pas déduit. Une valeur négative (rouge) signale une surcharge.</p>
   </div>`;
 }
@@ -1432,8 +1454,28 @@ function viewValidation(){
 /* ---------- Vue : Équipes & soldes (admin) ---------- */
 function viewTeam(){
   const y = new Date().getFullYear();
-  let people = sortPeople(activePeople());
-  if(teamViewFilter!=="all") people = people.filter(p=>p.teamId===teamViewFilter);
+  const teamsToShow = teamViewFilter==="all" ? config.teams : config.teams.filter(t=>t.id===teamViewFilter);
+  const rowsHtml = [];
+  for(const t of teamsToShow){
+    const members = sortPeople(activePeople().filter(p=>p.teamId===t.id));
+    if(!members.length) continue;
+    rowsHtml.push(`<tr class="teamhead"><td colspan="11" style="border-left:4px solid ${teamColor(t.id)}">${esc(t.name)} <span class="muted">(${members.length} pers.)</span></td></tr>`);
+    for(const p of members){
+      const b = balances(p,y);
+      const target = contractTarget(p);
+      rowsHtml.push(`<tr><td><b>${esc(personLabel(p))}</b>
+        ${(p.roles||[]).includes("admin")?'<span class="badge admin">Admin</span>':""}
+        ${(p.roles||[]).includes("cdp")?'<span class="badge cdp">CdP</span>':""}</td>
+        <td>${esc(locById(p.locationId)?.name||"—")}</td>
+        <td><span class="badge ${p.contract||"interne"}">${CONTRACTS[p.contract||"interne"].label}</span></td>
+        <td><b>${b.cpLeft}</b> / ${p.cp||0}</td>
+        <td><b>${b.rttLeft}</b> / ${p.rtt||0}</td>
+        <td>${b.pendingAll||"—"}</td>
+        <td>${b.sick||"—"}</td><td>${b.abs||"—"}</td><td>${b.tt||"—"}</td>
+        <td>${target}</td>
+        <td style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}"><b>${b.projWorked}</b></td></tr>`);
+    }
+  }
   return `
   <div class="card">
     <div class="actions" style="margin-bottom:10px">
@@ -1441,29 +1483,15 @@ function viewTeam(){
       <select id="team-filter" style="max-width:220px">${teamOptions(teamViewFilter,true)}</select>
     </div>
     <div style="overflow-x:auto"><table>
-      <tr><th>Personne</th><th>Équipe</th><th>Lieu</th><th>Contrat</th>
+      <tr><th>Personne</th><th>Lieu</th><th>Contrat</th>
           <th>CP restants</th><th>RTT restants</th><th>En attente</th>
           <th>Maladie</th><th>Imprévus</th><th>Télétravail</th>
           <th>Cible j. travaillés</th><th>Projeté</th></tr>
-      ${people.map(p=>{
-        const b = balances(p,y);
-        const ext = (p.contract||"interne")==="externe";
-        const target = contractTarget(p);
-        return `<tr><td><b>${esc(personLabel(p))}</b>
-          ${(p.roles||[]).includes("admin")?'<span class="badge admin">Admin</span>':""}
-          ${(p.roles||[]).includes("cdp")?'<span class="badge cdp">CdP</span>':""}</td>
-          <td>${esc(teamById(p.teamId)?.name||"—")}</td>
-          <td>${esc(locById(p.locationId)?.name||"—")}</td>
-          <td><span class="badge ${p.contract||"interne"}">${CONTRACTS[p.contract||"interne"].label}</span></td>
-          <td>${ext?"—":`<b>${b.cpLeft}</b> / ${p.cp||0}`}</td>
-          <td>${ext?"—":`<b>${b.rttLeft}</b> / ${p.rtt||0}`}</td>
-          <td>${b.pendingAll||"—"}</td>
-          <td>${b.sick||"—"}</td><td>${b.abs||"—"}</td><td>${b.tt||"—"}</td>
-          <td>${target}</td>
-          <td style="color:${b.projWorked>=target?'var(--ok)':'var(--danger)'}"><b>${b.projWorked}</b></td></tr>`;
-      }).join("")}
+      ${rowsHtml.join("")}
     </table></div>
-    <p class="muted" style="margin-top:8px">« Projeté » = jours ouvrés de l'année selon le lieu (${config.locations.map(l=>`${esc(l.name)} : ${businessDaysYear(l.id,y)} j`).join(" · ")}) moins les absences validées.</p>
+    <p class="muted" style="margin-top:8px">Regroupé par équipe (filtrable ci-dessus). « Projeté » = jours ouvrés de
+    l'année selon le lieu (${config.locations.map(l=>`${esc(l.name)} : ${businessDaysYear(l.id,y)} j`).join(" · ")})
+    moins les absences validées.</p>
     <div style="margin-top:8px"><button class="btn secondary small" id="btn-export-csv">⬇ Exporter toutes les demandes (CSV)</button></div>
   </div>
   <div class="card">
@@ -1805,14 +1833,20 @@ function bindAfterRender(){
     if(!name) return;
     config.people.push({id:uid(), name, winLogin:q("np-login").value.trim(), roles:[],
       teamId:config.teams[0].id, locationId:config.locations[0].id,
-      contract:"interne", target:CONTRACTS.interne.target, cp:25, rtt:10, active:true});
+      contract:"interne", target:CONTRACTS.interne.target, cp:CONTRACTS.interne.cp, rtt:CONTRACTS.interne.rtt, active:true});
     await store.saveConfig(config); toast("Membre ajouté ✓ — ajustez son équipe/lieu/contrat puis Enregistrer"); render();
   };
-  // changer le contrat pré-remplit la cible si elle valait l'autre défaut
+  // changer le contrat pré-remplit la cible et les droits CP/RTT s'ils valaient l'autre défaut
   document.querySelectorAll("[data-pcontract]").forEach(sel=>sel.onchange=()=>{
-    const tgt = document.querySelector(`[data-ptarget="${sel.dataset.pcontract}"]`);
-    const defs = [String(CONTRACTS.interne.target), String(CONTRACTS.externe.target)];
-    if(tgt && defs.includes(tgt.value)) tgt.value = CONTRACTS[sel.value].target;
+    const id = sel.dataset.pcontract;
+    const tgt = document.querySelector(`[data-ptarget="${id}"]`);
+    const defTargets = [String(CONTRACTS.interne.target), String(CONTRACTS.externe.target)];
+    if(tgt && defTargets.includes(tgt.value)) tgt.value = CONTRACTS[sel.value].target;
+    const cpEl = document.querySelector(`[data-pcp="${id}"]`), rttEl = document.querySelector(`[data-prtt="${id}"]`);
+    const defCps = [String(CONTRACTS.interne.cp), String(CONTRACTS.externe.cp)];
+    const defRtts = [String(CONTRACTS.interne.rtt), String(CONTRACTS.externe.rtt)];
+    if(cpEl && defCps.includes(cpEl.value)) cpEl.value = CONTRACTS[sel.value].cp;
+    if(rttEl && defRtts.includes(rttEl.value)) rttEl.value = CONTRACTS[sel.value].rtt;
   });
   if(q("btn-save-people")) q("btn-save-people").onclick = async ()=>{
     const val = (attr,id)=>document.querySelector(`[data-${attr}="${id}"]`);
