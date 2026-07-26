@@ -47,7 +47,7 @@
   button.btn.secondary:hover{background:#d1d5db;}
   button.btn.danger{background:var(--danger);}
   button.btn.ok{background:var(--ok);}
-  button.btn.small{padding:4px 10px; font-size:12px;}
+  button.btn.small{padding:7px 12px; font-size:13px;}
   .pill{display:inline-block; padding:2px 9px; border-radius:12px; font-size:12px; font-weight:600; color:#fff;}
   .st-pending{background:#f59e0b; color:#111;}
   .st-approved{background:var(--ok);}
@@ -71,6 +71,7 @@
   .legend .sw{display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:4px;}
   .pend-note{color:#b45309; font-size:10px; line-height:1.2; white-space:nowrap;}
   .smooth-note{color:#4a3aa7; font-size:10px; line-height:1.2; white-space:nowrap;}
+  .demand-note{color:#0f766e; font-size:10px; line-height:1.2; white-space:nowrap;}
   tr.teamhead td{background:#eef1f5; font-weight:700; padding:6px 10px; border-top:2px solid var(--border);}
   .teamtoggle{background:none; border:none; cursor:pointer; font-size:11px; color:var(--muted); padding:0 6px 0 0; vertical-align:middle;}
   .teamtoggle:hover{color:var(--text);}
@@ -85,6 +86,8 @@
   .muted{color:var(--muted); font-size:12px;}
   .toast{position:fixed; bottom:18px; right:18px; background:#111827; color:#fff; padding:10px 18px; border-radius:8px; font-size:13px; z-index:60; box-shadow:0 4px 14px rgba(0,0,0,.25);}
   .actions{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+  .actions label{display:inline-flex; align-items:center; gap:6px; margin:0; font-size:13px; color:var(--text); white-space:nowrap;}
+  .actions input, .actions select{width:auto;}
   .formgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:0 14px;}
 </style>
 </head>
@@ -408,10 +411,11 @@ let requests = [];
 let projects = [];
 let currentUser = null;
 let currentTab = "me";
-let calYear, calMonth, calTeam = "all", teamViewFilter = "all", settingsLoc = null;
+let calYear, calMonth, calTeam = "all", teamViewFilter = "all", settingsLoc = null, calShowPast = false;
 let capYear, capTeam = "all", capSkill = "all", capSmooth = true;
 let projSel = null, projYear;
 let collapsedTeams = new Set();
+let expandedWorkloads = new Set(), expandedAllocs = new Set();
 const now = new Date();
 calYear = now.getFullYear(); calMonth = now.getMonth();
 capYear = now.getFullYear(); projYear = now.getFullYear();
@@ -631,6 +635,16 @@ function migrateProject(p){
     externalDays: w.externalDays!=null ? w.externalDays : 0,
     monthlyOverride: w.monthlyOverride || {},
   }));
+  // v3 -> v4: per-person allocation moves from a flat {monthKey:pct} map to a
+  // constant %-per-month plus a sparse monthly override, mirroring workloads.
+  if(p.allocations){
+    for(const pid of Object.keys(p.allocations)){
+      const a = p.allocations[pid];
+      if(a && a.pct===undefined && a.monthlyOverride===undefined){
+        p.allocations[pid] = {pct:0, monthlyOverride:{...a}};
+      }
+    }
+  }
   return p;
 }
 /* List of consecutive {y,m,key} months spanning a project's start/end
@@ -679,6 +693,38 @@ function targetSkillCapacity(pr, skill, y, m, kind){
 }
 function allSkills(){
   return [...new Set(activePeople().map(p=>(p.skill||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"en"));
+}
+/* How much of a team's capacity a given month is committed to project
+   workload that ISN'T already covered by a named/individual allocation of
+   a matching-skill team member. Named allocations are netted out first
+   (they already reduce that person's own remaining capacity), so only the
+   leftover, unassigned share of the demand further reduces the team's
+   pool — this is what makes assigning a team/skill target to a project
+   actually show up in the Capacity plan. */
+function teamMonthUnassignedDemand(teamId,y,m,skillFilter){
+  let total = 0;
+  for(const pr of projects){
+    if(pr.active===false) continue;
+    const months = projectMonths(pr);
+    const idx = months.findIndex(mo=>mo.y===y && mo.m===m);
+    if(idx<0) continue;
+    const matchingTargets = (pr.targets||[]).filter(t=>t.teamId===teamId);
+    if(!matchingTargets.length) continue;
+    for(const w of (pr.workloads||[])){
+      const skill = (w.skill||"").trim();
+      if(skillFilter && skillFilter!=="all" && skill!==skillFilter) continue;
+      if(!matchingTargets.some(t=>!t.skill || t.skill===skill)) continue;
+      for(const kind of ["internal","external"]){
+        const demand = workloadMonthlySeries(w, months, kind)[idx];
+        if(!(demand>0)) continue;
+        const coverage = activePeople().filter(p=>p.teamId===teamId && (p.skill||"").trim()===skill &&
+          (kind==="internal" ? p.contract!=="externe" : p.contract==="externe"))
+          .reduce((s,p)=>s+(personMonthAllocPct(p,y,m)/100)*personMonthOpen(p,y,m), 0);
+        total += Math.max(0, demand-coverage);
+      }
+    }
+  }
+  return total;
 }
 
 /* Minimal IndexedDB wrapper to remember the chosen folder between launches */
@@ -1095,7 +1141,7 @@ function requestForm(idPrefix, withPerson){
       <label style="display:inline; margin-top:10px"><input type="checkbox" id="${idPrefix}-recur"> Weekly recurrence</label>
       <div id="${idPrefix}-recur-days" class="actions hidden" style="margin-top:6px">
         <span class="muted">Repeat on:</span>
-        ${["Mon","Tue","Wed","Thu","Fri"].map((lbl,i)=>`<label style="display:inline; margin:0">
+        ${["Mon","Tue","Wed","Thu","Fri"].map((lbl,i)=>`<label>
           <input type="checkbox" id="${idPrefix}-rd-${i+1}" ${i===0?"checked":""}> ${lbl}</label>`).join("")}
         <span class="muted">between the From/To dates above</span>
       </div>
@@ -1195,6 +1241,8 @@ function dayInfo(personId, dIso){
 function viewCalendar(){
   const y=calYear, m=calMonth;
   const first = new Date(y,m,1), nDays = new Date(y,m+1,0).getDate();
+  const isCurrentMonth = y===now.getFullYear() && m===now.getMonth();
+  const startDay = (isCurrentMonth && !calShowPast) ? now.getDate() : 1;
   let people = sortPeople(activePeople());
   if(calTeam!=="all") people = people.filter(p=>p.teamId===calTeam);
   const monthName = first.toLocaleDateString("en-GB",{month:"long",year:"numeric"});
@@ -1202,7 +1250,7 @@ function viewCalendar(){
   for(const l of config.locations) holByLoc[l.id] = locHolidaySet(l.id);
 
   const daysHead = [];
-  for(let d=1; d<=nDays; d++){
+  for(let d=startDay; d<=nDays; d++){
     const dt = new Date(y,m,d);
     daysHead.push(`<th>${"SMTWTFS"[dt.getDay()]}<br>${d}</th>`);
   }
@@ -1211,12 +1259,12 @@ function viewCalendar(){
   for(const t of teamsToShow){
     const members = people.filter(p=>p.teamId===t.id);
     if(!members.length) continue;
-    rows.push(teamHeaderRow(t, members.length, nDays+1));
+    rows.push(teamHeaderRow(t, members.length, nDays-startDay+2));
     if(collapsedTeams.has(t.id)) continue;
     for(const p of members){
       const hs = holByLoc[p.locationId] || new Set();
       const cells=[];
-      for(let d=1; d<=nDays; d++){
+      for(let d=startDay; d<=nDays; d++){
         const dt=new Date(y,m,d), dIso=iso(dt);
         if(p.endDate && dIso>p.endDate){ cells.push(`<td class="left" title="Left the team on ${fmtDate(p.endDate)}">·</td>`); continue; }
         if(isWeekend(dt)){ cells.push(`<td class="we"></td>`); continue; }
@@ -1233,7 +1281,7 @@ function viewCalendar(){
     }
   }
   const capCells=[];
-  for(let d=1; d<=nDays; d++){
+  for(let d=startDay; d<=nDays; d++){
     const dt=new Date(y,m,d), dIso=iso(dt);
     if(isWeekend(dt)){ capCells.push(`<td class="we"></td>`); continue; }
     let avail=0;
@@ -1255,6 +1303,7 @@ function viewCalendar(){
       <select id="cal-team" style="max-width:220px">${teamOptions(calTeam,true)}</select>
       <button class="btn small secondary" id="cal-expand-all">Expand all</button>
       <button class="btn small secondary" id="cal-collapse-all">Collapse all</button>
+      ${isCurrentMonth ? `<button class="btn small secondary" id="cal-toggle-past">${calShowPast?"Hide past days":"Show full month"}</button>` : ""}
       <span class="muted">Shown: ${people.length}, grouped by team — dimmed cells = pending. Public holidays (H) depend on each person's location.</span>
     </div>
     <div class="calwrap">
@@ -1291,13 +1340,22 @@ function personMonthAbsent(p,y,m,status){
   }
   return n;
 }
-function personMonthAllocPct(p,y,m){
+/* A person's allocation on a project is a constant % applied to every month
+   of the project's own start/end period, unless a specific month is
+   overridden — same override pattern as workloads. */
+function allocEffectivePct(pr,pid,y,m){
+  const a = pr.allocations && pr.allocations[pid];
+  if(!a) return 0;
   const key = `${y}-${pad(m+1)}`;
+  if(!projectMonths(pr).some(mo=>mo.key===key)) return 0;
+  const ov = a.monthlyOverride && a.monthlyOverride[key];
+  return ov!=null ? ov : (a.pct||0);
+}
+function personMonthAllocPct(p,y,m){
   let pct=0;
   for(const pr of projects){
     if(pr.active===false) continue;
-    const a = pr.allocations && pr.allocations[p.id];
-    if(a && a[key]) pct += a[key];
+    pct += allocEffectivePct(pr, p.id, y, m);
   }
   return pct;
 }
@@ -1396,40 +1454,44 @@ function viewCapacity(){
   const head = `<tr><th class="person">${capTeam==="all"?"Team":"Person"}</th>
     ${[...Array(12)].map((_,m)=>`<th ${m===curM?'style="background:#dbeafe"':''}>${monthName(y,m,true)}</th>`).join("")}<th>Year</th></tr>`;
 
-  const cell = (v,pend,smooth,cur)=>{
+  const cell = (v,pend,smooth,demand,cur)=>{
     const neg = v<-0.001;
     let notes = "";
     if(pend>0.001) notes += `<div class="pend-note" title="${fmtDays(pend)} day(s) of leave awaiting approval — not deducted until approved">−${fmtDays(pend)} ?</div>`;
     if(smooth>0.001) notes += `<div class="smooth-note" title="Simulation: smoothed share of this person's remaining leave for this month (${fmtDays(smooth)} d) — already deducted from the value above">~${fmtDays(smooth)}</div>`;
+    if(demand>0.001) notes += `<div class="demand-note" title="${fmtDays(demand)} day(s) of project workload not covered by a named allocation — deducted from this team/skill's pool">−${fmtDays(demand)} proj</div>`;
     return `<td${cur?' style="background:#eff6ff"':''}>${neg?`<span style="color:var(--danger); font-weight:700">${fmtDays(v)}</span>`:fmtDays(v)}${notes}</td>`;
   };
-  const mkRow = (label, sub, vals, pends, smooths, strong)=>{
+  const mkRow = (label, sub, vals, pends, smooths, demands, strong)=>{
     const sum = vals.reduce((s,v)=>s+v,0);
     return `<tr${strong?' class="caprow"':''}><td class="person">${esc(label)}${sub?`<br><span class="sub">${esc(sub)}</span>`:""}</td>
-      ${vals.map((v,m)=>cell(v,pends?pends[m]:0,smooths?smooths[m]:0,m===curM)).join("")}
+      ${vals.map((v,m)=>cell(v,pends?pends[m]:0,smooths?smooths[m]:0,demands?demands[m]:0,m===curM)).join("")}
       <td><b>${fmtDays(sum)}</b></td></tr>`;
   };
   let rows=[], series=[];
-  let totals=Array(12).fill(0), pendTot=Array(12).fill(0), smoothTot=Array(12).fill(0);
+  let totals=Array(12).fill(0), pendTot=Array(12).fill(0), smoothTot=Array(12).fill(0), demandTot=Array(12).fill(0);
   const sumMonths = (members, fn)=>[...Array(12)].map((_,m)=>members.reduce((s,p)=>s+fn(p,y,m),0));
   const remainFn = (p,yy,m)=>personMonthRemaining(p,yy,m,capSmooth);
   if(capTeam==="all"){
     for(const t of config.teams){
       const members = activePeople().filter(p=>p.teamId===t.id);
       if(!members.length) continue;
-      const vals = sumMonths(members, remainFn);
+      const demands = [...Array(12)].map((_,m)=>teamMonthUnassignedDemand(t.id,y,m,"all"));
+      const vals = sumMonths(members, remainFn).map((v,m)=>v-demands[m]);
       const pends = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
       const smooths = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
       series.push({label:t.name, color:teamColor(t.id), vals});
-      vals.forEach((v,m)=>totals[m]+=v); pends.forEach((v,m)=>pendTot[m]+=v); smooths.forEach((v,m)=>smoothTot[m]+=v);
-      rows.push(mkRow(t.name, members.length+" pers.", vals, pends, capSmooth?smooths:null));
+      vals.forEach((v,m)=>totals[m]+=v); pends.forEach((v,m)=>pendTot[m]+=v);
+      smooths.forEach((v,m)=>smoothTot[m]+=v); demands.forEach((v,m)=>demandTot[m]+=v);
+      rows.push(mkRow(t.name, members.length+" pers.", vals, pends, capSmooth?smooths:null, demands));
     }
-    rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, true));
+    rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, demandTot, true));
   }else{
     let members = activePeople().filter(p=>p.teamId===capTeam);
     if(capSkill!=="all") members = members.filter(p=>(p.skill||"").trim()===capSkill);
     members = sortPeople(members);
-    totals = sumMonths(members, remainFn);
+    demandTot = [...Array(12)].map((_,m)=>teamMonthUnassignedDemand(capTeam,y,m,capSkill));
+    totals = sumMonths(members, remainFn).map((v,m)=>v-demandTot[m]);
     pendTot = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
     smoothTot = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
     series.push({label:(teamById(capTeam)?.name||"")+(capSkill!=="all"?" · "+capSkill:""), color:teamColor(capTeam), vals:totals});
@@ -1441,7 +1503,7 @@ function viewCapacity(){
         `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}${p.skill?` · ${p.skill}`:""}`,
         vals, pends, capSmooth?smooths:null));
     }
-    rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, true));
+    rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, demandTot, true));
   }
   const skills = capTeam==="all" ? [] : teamSkills(capTeam);
   const legend = series.length>1 ? `<div class="legend" style="margin:0 0 8px">
@@ -1458,7 +1520,7 @@ function viewCapacity(){
         <option value="all">All skills</option>
         ${skills.map(s=>`<option value="${esc(s)}" ${capSkill===s?"selected":""}>${esc(s)}</option>`).join("")}
       </select>`:""}
-      <label style="display:inline; margin:0"><input type="checkbox" id="capa-smooth" ${capSmooth?"checked":""}>
+      <label><input type="checkbox" id="capa-smooth" ${capSmooth?"checked":""}>
         Simulate remaining leave (smoothed over the year)</label>
     </div>
     <h2>Remaining capacity ${capTeam==="all"?"by team":"— "+esc(teamById(capTeam)?.name||"")} (person-days)</h2>
@@ -1476,7 +1538,10 @@ function viewCapacity(){
     the gap between business days for the year and their worked-days target, minus what they've already taken —
     an estimate of how many more days off they can take while still hitting their target. It's an indicative
     projection, not an actual booking (uncheck the box to see only actual absences).`:""}
-    Remote work isn't deducted. A negative value (red) signals overcapacity.</p>
+    Remote work isn't deducted. A negative value (red) signals overcapacity. The "−x proj" note is project
+    workload (Projects tab) assigned to this team/skill that isn't already covered by a named/individual
+    allocation of a matching-skill member — it's netted against named allocations first, then the leftover
+    reduces this pool directly.</p>
   </div>`;
 }
 
@@ -1521,8 +1586,8 @@ function viewProjects(){
     <h2 style="margin-top:16px">➕ New project</h2>
     <div class="actions">
       <input id="proj-new-name" placeholder="Project name" style="max-width:200px">
-      <label style="display:inline; margin:0">From <input type="date" id="proj-new-start" value="${todayIso()}" style="max-width:150px"></label>
-      <label style="display:inline; margin:0">To <input type="date" id="proj-new-end" value="${iso(addDays(fromIso(todayIso()),365))}" style="max-width:150px"></label>
+      <label>From <input type="date" id="proj-new-start" value="${todayIso()}" style="max-width:150px"></label>
+      <label>To <input type="date" id="proj-new-end" value="${iso(addDays(fromIso(todayIso()),365))}" style="max-width:150px"></label>
       <input id="proj-new-triskell" placeholder="Triskell code" style="max-width:150px">
       <button class="btn small" id="btn-add-proj">Create</button>
     </div>
@@ -1536,15 +1601,34 @@ function viewProjects(){
     const addable = sortPeople(activePeople().filter(p=>!(pr.allocations||{})[p.id]));
     const defStartM = y===now.getFullYear() ? now.getMonth() : 0;
     const monthOpts = sel=>[...Array(12)].map((_,m)=>`<option value="${m}" ${m===sel?"selected":""}>${monthName(y,m,false)}</option>`).join("");
-    const rows = allocated.map(p=>{
-      const a = pr.allocations[p.id]||{};
-      return `<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(teamById(p.teamId)?.name||"")} · ${esc(p.skill||"—")}</span></td>
-        ${[...Array(12)].map((_,m)=>{
-          const key=`${y}-${pad(m+1)}`;
-          return `<td><input type="number" min="0" max="100" step="5" style="width:52px; text-align:right"
-            data-alloc="${p.id}|${key}" value="${a[key]||""}" placeholder="0"></td>`;
-        }).join("")}
-        <td><button class="btn small danger" data-arem="${p.id}" title="Remove from project">✕</button></td></tr>`;
+    const allocBlocks = allocated.map(p=>{
+      const a = pr.allocations[p.id] || {pct:0, monthlyOverride:{}};
+      const expanded = expandedAllocs.has(p.id);
+      const overrideCount = a.monthlyOverride ? Object.keys(a.monthlyOverride).length : 0;
+      const monthRow = months.map(mo=>{
+        const v = (a.monthlyOverride && a.monthlyOverride[mo.key]!=null) ? a.monthlyOverride[mo.key] : (a.pct||0);
+        return `<td><input type="number" min="0" max="100" step="5" style="width:52px; text-align:right"
+          data-allocmonth="${p.id}|${mo.key}" value="${v}"></td>`;
+      }).join("");
+      return `
+      <div class="card" style="margin-top:10px">
+        <div class="actions">
+          <button class="teamtoggle" data-alloctoggle="${p.id}" title="${expanded?"Collapse":"Expand monthly detail"}">${expanded?"▼":"▶"}</button>
+          <b>${esc(personLabel(p))}</b>
+          <span class="muted">${esc(teamById(p.teamId)?.name||"")} · ${esc(p.skill||"—")}</span>
+          <label>% (constant across the project) <input type="number" min="0" max="100" step="5" style="width:70px" data-allocpct="${p.id}" value="${a.pct||0}"></label>
+          ${overrideCount>0 ? `<span class="muted">(${overrideCount} month(s) customized)</span>` : ""}
+          ${expanded?`<button class="btn small secondary" data-allocreset="${p.id}">↺ Reset to constant</button>`:""}
+          <button class="btn small danger" data-arem="${p.id}" title="Remove from project">✕ Remove</button>
+        </div>
+        ${expanded && months.length? `
+        <div class="calwrap" style="margin-top:8px">
+          <table class="cal">
+            <tr><th class="person">Month</th>${months.map(mo=>`<th>${monthName(mo.y,mo.m,true)} ${mo.y}</th>`).join("")}</tr>
+            <tr><td class="person">% allocated</td>${monthRow}</tr>
+          </table>
+        </div>`:expanded?`<p class="muted" style="margin-top:6px">Set a valid project start/end date to edit monthly detail.</p>`:""}
+      </div>`;
     }).join("");
     const overloads = projectOverloads(y);
     const targets = pr.targets||[];
@@ -1559,10 +1643,16 @@ function viewProjects(){
       if(!months.length) return `<div class="notice err" style="margin-top:10px">Set a valid project start/end date to plan "${esc(w.skill||"(unnamed)")}".</div>`;
       const intSeries = workloadMonthlySeries(w, months, "internal");
       const extSeries = workloadMonthlySeries(w, months, "external");
+      const isOver = (kind, series) => months.some((mo,i)=>{
+        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m, kind);
+        return cap!=null && series[i]>cap+0.001;
+      });
+      const over = isOver("internal", intSeries) || isOver("external", extSeries);
+      const expanded = expandedWorkloads.has(w.id);
       const plannedRow = (kind, series) => months.map((mo,i)=>{
         const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m, kind);
-        const over = cap!=null && series[i]>cap+0.001;
-        return `<td><input type="number" min="0" step="0.5" style="width:56px; text-align:right; ${over?'color:var(--danger); font-weight:700;':''}"
+        const overCell = cap!=null && series[i]>cap+0.001;
+        return `<td><input type="number" min="0" step="0.5" style="width:56px; text-align:right; ${overCell?'color:var(--danger); font-weight:700;':''}"
           data-wlmonth="${w.id}|${mo.key}|${kind}" value="${fmtDays(series[i])}"
           title="${cap!=null?`Available capacity: ${fmtDays(cap)} d`:'No team/skill target assigned for this skill yet'}"></td>`;
       }).join("");
@@ -1573,12 +1663,17 @@ function viewProjects(){
       return `
       <div class="card" style="margin-top:10px">
         <div class="actions">
+          <button class="teamtoggle" data-wltoggle="${w.id}" title="${expanded?"Collapse":"Expand monthly detail"}">${expanded?"▼":"▶"}</button>
           <b>${esc(w.skill||"(unnamed skill)")}</b>
-          <label style="display:inline; margin:0">Internal total <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}|internal" value="${w.internalDays||0}"></label>
-          <label style="display:inline; margin:0">External total <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}|external" value="${w.externalDays||0}"></label>
-          <button class="btn small secondary" data-wlreset="${w.id}">↺ Reset to even split</button>
+          <span class="muted">Internal ${fmtDays(w.internalDays||0)} d · External ${fmtDays(w.externalDays||0)} d</span>
+          ${over?`<span class="pill" style="background:var(--danger)">Over capacity</span>`:""}
+          ${expanded?`
+          <label>Internal total <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}|internal" value="${w.internalDays||0}"></label>
+          <label>External total <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}|external" value="${w.externalDays||0}"></label>
+          <button class="btn small secondary" data-wlreset="${w.id}">↺ Reset to even split</button>`:""}
           <button class="btn small danger" data-wldel="${w.id}">✕ Delete line</button>
         </div>
+        ${expanded?`
         <div class="calwrap" style="margin-top:8px">
           <table class="cal">
             <tr><th class="person">Month</th>${months.map(mo=>`<th>${monthName(mo.y,mo.m,true)} ${mo.y}</th>`).join("")}</tr>
@@ -1587,7 +1682,7 @@ function viewProjects(){
             <tr><td class="person">External planned (d)</td>${plannedRow("external", extSeries)}</tr>
             <tr><td class="person">External capacity (d)</td>${capRow("external")}</tr>
           </table>
-        </div>
+        </div>`:""}
       </div>`;
     }).join("");
 
@@ -1598,9 +1693,9 @@ function viewProjects(){
         <button class="btn small secondary" id="proj-close">Close</button>
       </div>
       <div class="actions">
-        <label style="display:inline; margin:0">From <input type="date" id="proj-start" value="${pr.startDate}" style="max-width:150px"></label>
-        <label style="display:inline; margin:0">To <input type="date" id="proj-end" value="${pr.endDate}" style="max-width:150px"></label>
-        <label style="display:inline; margin:0">Triskell code <input id="proj-triskell" value="${esc(pr.triskellCode||"")}" style="max-width:150px"></label>
+        <label>From <input type="date" id="proj-start" value="${pr.startDate}" style="max-width:150px"></label>
+        <label>To <input type="date" id="proj-end" value="${pr.endDate}" style="max-width:150px"></label>
+        <label>Triskell code <input id="proj-triskell" value="${esc(pr.triskellCode||"")}" style="max-width:150px"></label>
         <button class="btn small ok" id="btn-save-proj-info">💾 Save</button>
       </div>
 
@@ -1634,14 +1729,11 @@ function viewProjects(){
       <p class="muted" style="margin-top:6px">Assigning a team/skill target here is what lets the workload above
       compare itself to real, available capacity. A project can target several teams and/or skills.</p>
 
-      <h3 style="margin-top:20px">People allocated <span class="muted" style="font-weight:400">(${y})</span></h3>
-      <div class="actions" style="margin-bottom:8px">
-        <button class="btn small secondary" id="proj-prev">◀</button><b>${y}</b><button class="btn small secondary" id="proj-next">▶</button>
-      </div>
-      ${allocated.length? `<div class="calwrap"><table class="cal">
-        <tr><th class="person">Person</th>${[...Array(12)].map((_,m)=>`<th>${monthName(y,m,true)}</th>`).join("")}<th></th></tr>
-        ${rows}
-      </table></div>` : `<p class="muted">No one allocated yet.</p>`}
+      <h3 style="margin-top:20px">People allocated</h3>
+      <p class="muted" style="margin-top:-4px">A constant % applied across the whole project period
+      (${months.length||"—"} month(s)) by default; expand a person to fine-tune specific months, exactly like the
+      workload lines above.</p>
+      ${allocBlocks || `<p class="muted">No one allocated yet.</p>`}
       <div class="actions" style="margin-top:10px">
         <select id="proj-person-sel" style="max-width:240px">
           ${addable.map(p=>`<option value="${p.id}">${esc(personLabel(p))}</option>`).join("")}
@@ -1649,16 +1741,17 @@ function viewProjects(){
         <button class="btn small" id="proj-add-person" ${addable.length?"":"disabled"}>Add person</button>
         <button class="btn small ok" id="btn-save-alloc" ${allocated.length?"":"disabled"}>💾 Save allocations</button>
       </div>
-      <p class="muted" style="margin-top:8px">Allocation as a % of the person's time, month by month — useful to
-      force a specific person (e.g. cross-functional) onto this project; that then reduces their capacity available
-      for the team's other projects. Blank = 0%. Remaining capacity (Capacity plan tab) deducts these allocations.</p>
+      <p class="muted" style="margin-top:8px">Useful to force a specific person (e.g. cross-functional) onto this
+      project; that then reduces their capacity available for the team's other projects. Remaining capacity
+      (Capacity plan tab) deducts these allocations.</p>
       ${overloads.length? `<div class="notice err" style="margin-top:8px"><b>Overallocation (&gt;100% across all projects):</b><br>${overloads.map(esc).join("<br>")}</div>`:""}
 
       <h3 style="margin-top:20px">Bulk allocation — a whole team/skill target</h3>
       ${targets.length? `<p class="muted">Allocates the same % in one go to every active person matching the chosen
-      target, over the selected period. Each person stays individually editable above afterwards.</p>
+      target, over the selected months of ${y}. Each person stays individually editable above afterwards.</p>
       <div class="actions">
         <select id="bulk-target" style="max-width:260px">${bulkOptions}</select>
+        <button class="btn small secondary" id="proj-prev">◀</button><b>${y}</b><button class="btn small secondary" id="proj-next">▶</button>
         <span class="muted">from</span> <select id="bulk-start-m" style="max-width:120px">${monthOpts(defStartM)}</select>
         <span class="muted">to</span> <select id="bulk-end-m" style="max-width:120px">${monthOpts(11)}</select>
         <span class="muted">%</span> <input type="number" id="bulk-pct" min="0" max="100" step="5" value="20" style="width:70px">
@@ -1865,12 +1958,12 @@ function viewSettings(){
         <span class="muted">${config.locations.map(l=>esc(l.name)).join(" · ")}</span>
       </div>
       <div class="actions" style="margin-bottom:10px">
-        <label style="display:inline; margin:0">Remote quota/yr</label>
+        <label>Remote quota/yr</label>
         <input id="loc-remote-quota" type="number" min="0" step="1" placeholder="blank = unlimited, untracked"
           value="${loc.remoteQuota==null?"":loc.remoteQuota}" style="max-width:110px">
-        <label style="display:inline; margin:0">Waiver bonus</label>
+        <label>Waiver bonus</label>
         <input id="loc-remote-bonus" type="number" min="0" step="1" value="${loc.remoteWaiverBonus||0}" style="max-width:90px">
-        <label style="display:inline; margin:0"><input type="checkbox" id="loc-onsite-enforce" ${loc.enforceOnsiteDays?"checked":""}> Enforce on-site days</label>
+        <label><input type="checkbox" id="loc-onsite-enforce" ${loc.enforceOnsiteDays?"checked":""}> Enforce on-site days</label>
         <button class="btn small ok" id="btn-save-loc-policy">💾 Save</button>
       </div>
       <p class="muted" style="margin-top:-4px; margin-bottom:10px">Remote quota: yearly cap on remote-work
@@ -2007,9 +2100,10 @@ function bindAfterRender(){
     const c = prompt("Reason for rejection (optional):")||"";
     decide(b.dataset.reject,"rejected",c);
   });
-  if(q("cal-prev")) q("cal-prev").onclick = ()=>{ calMonth--; if(calMonth<0){calMonth=11;calYear--;} render(); };
-  if(q("cal-next")) q("cal-next").onclick = ()=>{ calMonth++; if(calMonth>11){calMonth=0;calYear++;} render(); };
-  if(q("cal-today")) q("cal-today").onclick = ()=>{ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); render(); };
+  if(q("cal-prev")) q("cal-prev").onclick = ()=>{ calMonth--; if(calMonth<0){calMonth=11;calYear--;} calShowPast=false; render(); };
+  if(q("cal-next")) q("cal-next").onclick = ()=>{ calMonth++; if(calMonth>11){calMonth=0;calYear++;} calShowPast=false; render(); };
+  if(q("cal-today")) q("cal-today").onclick = ()=>{ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); calShowPast=false; render(); };
+  if(q("cal-toggle-past")) q("cal-toggle-past").onclick = ()=>{ calShowPast=!calShowPast; render(); };
   if(q("cal-team")) q("cal-team").onchange = e=>{ calTeam=e.target.value; render(); };
   if(q("capa-prev")) q("capa-prev").onclick = ()=>{ capYear--; render(); };
   if(q("capa-next")) q("capa-next").onclick = ()=>{ capYear++; render(); };
@@ -2030,9 +2124,12 @@ function bindAfterRender(){
                createdBy:currentUser.id, createdAt:new Date().toISOString()};
     await store.saveProject(p);
     projects.push(p); projSel = p.id;
+    expandedWorkloads = new Set(); expandedAllocs = new Set();
     toast("Project created ✓ — define its expected workload, then assign it to team/skill targets"); render();
   };
-  document.querySelectorAll("[data-popen]").forEach(b=>b.onclick=()=>{ projSel=b.dataset.popen; render(); });
+  document.querySelectorAll("[data-popen]").forEach(b=>b.onclick=()=>{
+    projSel=b.dataset.popen; expandedWorkloads = new Set(); expandedAllocs = new Set(); render();
+  });
   document.querySelectorAll("[data-pdel-proj]").forEach(b=>b.onclick=async ()=>{
     if(!isCdp()) return;
     const p = projects.find(x=>x.id===b.dataset.pdelProj);
@@ -2057,7 +2154,9 @@ function bindAfterRender(){
     if(!isCdp()) return;
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
     pr.allocations = pr.allocations||{};
-    pr.allocations[q("proj-person-sel").value] = {};
+    const pid = q("proj-person-sel").value;
+    pr.allocations[pid] = {pct:0, monthlyOverride:{}};
+    expandedAllocs.add(pid);
     await store.saveProject(pr); render();
   };
   document.querySelectorAll("[data-arem]").forEach(b=>b.onclick=async ()=>{
@@ -2066,18 +2165,38 @@ function bindAfterRender(){
     delete pr.allocations[b.dataset.arem];
     await store.saveProject(pr); render();
   });
+  document.querySelectorAll("[data-alloctoggle]").forEach(b=>b.onclick=()=>{
+    const id = b.dataset.alloctoggle;
+    if(expandedAllocs.has(id)) expandedAllocs.delete(id); else expandedAllocs.add(id);
+    render();
+  });
+  document.querySelectorAll("[data-allocmonth]").forEach(inp=>inp.addEventListener("input", ()=>{ inp.dataset.touched="1"; }));
   if(q("btn-save-alloc")) q("btn-save-alloc").onclick = async ()=>{
     if(!isCdp()) return;
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
-    document.querySelectorAll("[data-alloc]").forEach(inp=>{
-      const [pid,key] = inp.dataset.alloc.split("|");
-      const v = Math.max(0, Math.min(100, parseInt(inp.value)||0));
-      pr.allocations[pid] = pr.allocations[pid]||{};
-      if(v>0) pr.allocations[pid][key] = v; else delete pr.allocations[pid][key];
+    document.querySelectorAll("[data-allocpct]").forEach(inp=>{
+      const pid = inp.dataset.allocpct;
+      pr.allocations[pid] = pr.allocations[pid]||{pct:0, monthlyOverride:{}};
+      pr.allocations[pid].pct = Math.max(0, Math.min(100, parseInt(inp.value)||0));
+    });
+    document.querySelectorAll("[data-allocmonth]").forEach(inp=>{
+      if(inp.dataset.touched!=="1") return;
+      const [pid,key] = inp.dataset.allocmonth.split("|");
+      pr.allocations[pid] = pr.allocations[pid]||{pct:0, monthlyOverride:{}};
+      pr.allocations[pid].monthlyOverride = pr.allocations[pid].monthlyOverride||{};
+      pr.allocations[pid].monthlyOverride[key] = Math.max(0, Math.min(100, parseInt(inp.value)||0));
     });
     await store.saveProject(pr);
     toast("Allocations saved ✓"); render();
   };
+  document.querySelectorAll("[data-allocreset]").forEach(b=>b.onclick=async ()=>{
+    if(!isCdp()) return;
+    const pr = projects.find(x=>x.id===projSel); if(!pr) return;
+    const a = pr.allocations[b.dataset.allocreset]; if(!a) return;
+    a.monthlyOverride = {};
+    await store.saveProject(pr);
+    toast("Reset to constant ✓"); render();
+  });
   if(q("btn-bulk-alloc")) q("btn-bulk-alloc").onclick = async ()=>{
     if(!isCdp()) return;
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
@@ -2089,10 +2208,11 @@ function bindAfterRender(){
     if(!members.length) return alert("No active person matches this target.");
     pr.allocations = pr.allocations||{};
     for(const p of members){
-      pr.allocations[p.id] = pr.allocations[p.id]||{};
+      pr.allocations[p.id] = pr.allocations[p.id]||{pct:0, monthlyOverride:{}};
+      pr.allocations[p.id].monthlyOverride = pr.allocations[p.id].monthlyOverride||{};
       for(let m=startM; m<=endM; m++){
         const key = `${projYear}-${pad(m+1)}`;
-        if(pct>0) pr.allocations[p.id][key] = pct; else delete pr.allocations[p.id][key];
+        pr.allocations[p.id].monthlyOverride[key] = pct;
       }
     }
     await store.saveProject(pr);
@@ -2130,10 +2250,17 @@ function bindAfterRender(){
     const internalDays = Math.max(0, parseFloat(q("wl-internal").value)||0);
     const externalDays = Math.max(0, parseFloat(q("wl-external").value)||0);
     pr.workloads = pr.workloads||[];
-    pr.workloads.push({id:uid(), skill, internalDays, externalDays, monthlyOverride:{}});
+    const wl = {id:uid(), skill, internalDays, externalDays, monthlyOverride:{}};
+    pr.workloads.push(wl);
+    expandedWorkloads.add(wl.id);
     await store.saveProject(pr);
     toast("Workload line added ✓"); render();
   };
+  document.querySelectorAll("[data-wltoggle]").forEach(b=>b.onclick=()=>{
+    const id = b.dataset.wltoggle;
+    if(expandedWorkloads.has(id)) expandedWorkloads.delete(id); else expandedWorkloads.add(id);
+    render();
+  });
   document.querySelectorAll("[data-wlmonth]").forEach(inp=>inp.addEventListener("input", ()=>{ inp.dataset.touched="1"; }));
   if(q("btn-save-workloads")) q("btn-save-workloads").onclick = async ()=>{
     if(!isCdp()) return;

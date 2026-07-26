@@ -79,6 +79,12 @@ Les jours sont décomptés en **jours ouvrés selon le lieu de la personne** :
 un 14 juillet est férié pour Paris mais ouvré pour Kuala Lumpur, et
 inversement pour le Federal Territory Day.
 
+Par défaut, le **calendrier équipe** affiche le mois en cours à partir
+d'**aujourd'hui** (le passé du mois n'est pas montré) — un bouton « Show
+full month » permet de revoir le mois depuis le 1er si besoin ; naviguer
+vers un autre mois (◀ / ▶ / autre équipe) affiche toujours ce mois en
+entier.
+
 ### Regroupement par équipe, avec expand/collapse
 
 Le **calendrier équipe** et **Équipes & soldes (Teams & balances)**
@@ -154,6 +160,12 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   C'est une projection indicative pour anticiper la prise de congés à venir,
   pas une réservation réelle. Décocher la case revient aux seules absences
   actées.
+- **Charge projet non couverte** (annotation turquoise « −x proj ») : quand
+  un projet cible l'équipe/compétence affichée, la part de sa charge que les
+  affectations nommées ne couvrent pas encore réduit directement la
+  capacité restante de l'équipe (ou de la personne sélectionnée en filtre
+  compétence). Voir « Projets & affectations » ci-dessous pour le détail du
+  calcul.
 
 ### Projets & affectations (profil Chef de projet)
 
@@ -168,7 +180,10 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   projet (total ÷ nombre de mois). Le chef de projet peut **surcharger un
   mois précis** (le reste se rééquilibre automatiquement sur les mois non
   modifiés) ou tout réinitialiser au lissage uniforme (« ↺ Reset to even
-  split »).
+  split »). Chaque ligne de charge est **repliée par défaut** (résumé :
+  compétence, totaux interne/externe, pastille « Over capacity » si un mois
+  dépasse la capacité) ; cliquer sur ▶ déplie la ligne pour éditer les
+  totaux et le détail mois par mois.
 - **Cibles équipe/compétence** : un projet peut viser **plusieurs cibles
   équipe/compétence** (bloc « Team / skill targets » — en ajouter, en
   retirer ; laisser la compétence vide vise toute l'équipe). Dès qu'une
@@ -178,17 +193,19 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   validées − autres affectations), séparément pour interne et externe. Un
   mois où la charge planifiée dépasse la capacité disponible s'affiche en
   rouge ; « — » signifie qu'aucune cible ne correspond encore à cette
-  compétence.
-- Deux façons d'affecter des personnes **nommément**, combinables, et
-  indépendantes de la vérification de charge ci-dessus (utile notamment
-  pour forcer une personne transverse sur un % donné) :
+  compétence. **Assigner une cible réduit aussi le capacity plan de
+  l'équipe** (voir plus bas) : ce n'est pas qu'un contrôle visuel.
+- Deux façons d'affecter des personnes **nommément**, combinables (utile
+  notamment pour forcer une personne transverse sur un % donné) :
   - **Affectation groupée** : on choisit UNE des cibles du projet, un % et
     une période, appliqués en un clic à toutes les personnes actives
     correspondantes ;
-  - **Affectation individuelle** : par personne, par mois, en % du temps —
-    une personne (notamment transverse) peut être répartie sur plusieurs
-    projets et venir d'une équipe hors des cibles du projet. Modifiable
-    après une affectation groupée pour ajuster cas par cas.
+  - **Affectation individuelle** : par personne, un **% constant appliqué à
+    tous les mois de la période du projet** par défaut ; comme pour la
+    charge, déplier (▶) la personne permet d'affiner mois par mois (le
+    reste garde le % constant), avec un bouton « ↺ Reset to constant ».
+    Une personne (notamment transverse) peut être répartie sur plusieurs
+    projets et venir d'une équipe hors des cibles du projet.
 - Le **% restant non affecté** d'une personne reste disponible pour sa
   propre équipe (c'est exactement ce que montre le capacity plan : la
   capacité restante déduit uniquement ce qui est explicitement affecté).
@@ -197,6 +214,17 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   dans le capacity plan — l'application avertit mais ne bloque pas la
   saisie, à vous de trancher. Décocher « Actif » suspend un projet sans
   perdre ses affectations.
+- **Effet sur le capacity plan de l'équipe** : assigner une cible
+  équipe/compétence à un projet réduit désormais réellement la capacité
+  restante de cette équipe dans l'onglet Capacity plan (annotation
+  « −x proj » sous la valeur, comme les congés en attente ou la
+  simulation). Le calcul priorise les **affectations nommées** : la charge
+  du projet est d'abord comparée à ce que les personnes de l'équipe ayant
+  la bonne compétence (et le bon type de contrat, interne/externe) ont
+  déjà individuellement affecté ; seule la part **non couverte** par ces
+  affectations nommées vient ensuite réduire le pool global de l'équipe —
+  pas de double comptage, puisque l'affectation nommée réduit déjà la
+  capacité de la personne concernée.
 - Stockage : un fichier JSON par projet (`projects/proj_*.json`), même
   logique anti-conflits que les demandes.
 
