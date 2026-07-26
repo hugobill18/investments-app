@@ -17,6 +17,12 @@ installation** sur les postes. Elle fonctionne intégralement dans le navigateur
 stocke ses données dans un **dossier OneDrive/SharePoint partagé** synchronisé
 sur chaque poste.
 
+Convention d'interface : une petite bulle **ⓘ** à côté d'un titre de section
+contient l'explication détaillée du fonctionnement de cette section (calculs,
+règles, etc.) — cliquez/tapez dessus pour l'afficher, cliquez ailleurs ou
+appuyez sur Échap pour la refermer. Les écrans eux-mêmes restent volontairement
+épurés ; ce README documente ces mêmes explications de façon plus complète.
+
 ---
 
 ## 1. Mise en place (une seule fois, par le responsable)

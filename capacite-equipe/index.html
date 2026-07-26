@@ -89,6 +89,16 @@
   .actions label{display:inline-flex; align-items:center; gap:6px; margin:0; font-size:13px; color:var(--text); white-space:nowrap;}
   .actions input, .actions select{width:auto;}
   .formgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:0 14px;}
+  .info-pop{display:inline-block; position:relative; margin-left:5px; vertical-align:middle;}
+  .info-pop summary{display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
+    border-radius:50%; border:1px solid var(--muted); color:var(--muted); font-size:11px; font-weight:700;
+    line-height:1; cursor:pointer; list-style:none; user-select:none;}
+  .info-pop summary::-webkit-details-marker{display:none;}
+  .info-pop summary:hover, .info-pop[open] summary{border-color:var(--primary); color:var(--primary); background:#eff6ff;}
+  .info-pop .info-body{position:absolute; z-index:30; top:22px; left:0; background:#fff; border:1px solid var(--border);
+    border-radius:8px; padding:10px 12px; font-size:12.5px; color:var(--text); line-height:1.5; width:320px;
+    max-width:min(320px,80vw); box-shadow:0 4px 14px rgba(0,0,0,.16);}
+  h2 .info-pop, h3 .info-pop{font-weight:400;}
 </style>
 </head>
 <body>
@@ -1096,6 +1106,16 @@ function balances(person, year){
    Rendering
    ===================================================================== */
 function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+/* A small "ⓘ" bubble that reveals a help paragraph on click/tap, instead of
+   printing the explanation directly on the screen. `html` is trusted,
+   app-authored markup (never user data), so it's inserted as-is. */
+function info(html){ return `<details class="info-pop"><summary>i</summary><div class="info-body">${html}</div></details>`; }
+document.addEventListener("click", e=>{
+  document.querySelectorAll("details.info-pop[open]").forEach(d=>{ if(!d.contains(e.target)) d.removeAttribute("open"); });
+});
+document.addEventListener("keydown", e=>{
+  if(e.key==="Escape") document.querySelectorAll("details.info-pop[open]").forEach(d=>d.removeAttribute("open"));
+});
 function teamOptions(sel, withAll){
   const opts = config.teams.map(t=>`<option value="${t.id}" ${sel===t.id?"selected":""}>${esc(t.name)}</option>`);
   return (withAll?`<option value="all" ${sel==="all"?"selected":""}>All teams</option>`:"")+opts.join("");
@@ -1231,14 +1251,12 @@ function viewMe(){
   </div>
   <div class="row" style="margin-top:16px">
     <div class="card" style="flex:1.2">
-      <h2>➕ New request</h2>
+      <h2>➕ New request${info(`Paid leave, RTT and unpaid leave require approval (unless submitted by an
+      administrator, which is auto-approved). Remote work, sick leave, unplanned absence and training are
+      recorded immediately. Days are counted against the public holidays of the selected person's location.`)}</h2>
       ${isAdmin()?`<div class="notice info">You're an administrator: the "Person" field below lets you
       submit a request for yourself or for any team member (handy for a sick leave entry or a correction).</div>`:""}
       ${requestForm("nf", isAdmin())}
-      <p class="muted" style="margin-top:10px">Paid leave, RTT and unpaid leave require approval
-      (unless submitted by an administrator, which is auto-approved). Remote work, sick leave, unplanned
-      absence and training are recorded immediately. Days are counted against the public holidays of the
-      selected person's location.</p>
       ${(()=>{ const loc=locById(currentUser.locationId), team=teamById(currentUser.teamId);
         if(loc?.enforceOnsiteDays && team?.onsiteDay!=null){
           const dayName = WEEKDAY_OPTS.find(([v])=>v===String(team.onsiteDay))?.[1] || "";
@@ -1327,7 +1345,10 @@ function viewCalendar(){
       <select id="cal-team" style="max-width:220px">${teamOptions(calTeam,true)}</select>
       <button class="btn small secondary" id="cal-expand-all">Expand all</button>
       <button class="btn small secondary" id="cal-collapse-all">Collapse all</button>
-      <span class="muted">Rolling month from ${fmtDate(iso(start))} — Shown: ${people.length}, grouped by team — dimmed cells = pending. Public holidays (H) depend on each person's location.</span>
+      <span class="muted">Shown: ${people.length}</span>${info(`Rolling month window starting
+        ${fmtDate(iso(start))} (◀/▶ shift it by a month, "Today" resets it). People are grouped by team;
+        dimmed cells mean the absence is still pending approval. Public holidays ("H") depend on each
+        person's location.`)}
     </div>
     <div class="calwrap">
       <table class="cal">
@@ -1550,26 +1571,24 @@ function viewCapacity(){
       <span class="muted">Teams:</span>
       ${teamFilterChips}
     </div>
-    <h2>Remaining capacity by team (person-days)</h2>
+    <h2>Remaining capacity by team (person-days)${info(`Remaining capacity = business days for the month at
+      each person's location (weekends and local public holidays excluded) − <b>approved</b> absences − project
+      allocations (% of the month, Projects tab) − remaining-leave simulation, if enabled (see "~x" below).
+      Pending leave shows in orange ("−x ?") but only affects capacity once approved. The "~x" simulation
+      spreads an estimate of remaining leave still to be taken evenly over the remaining months of the year:
+      for an <b>internal</b>, their remaining CP+RTT balance; for an <b>external</b>, the gap between business
+      days for the year and their worked-days target, minus what they've already taken. It's an indicative
+      projection, not an actual booking. Remote work isn't deducted. A negative value (red) signals
+      overcapacity. The "−x proj" note is project workload (Projects tab) assigned to this team that isn't
+      already covered by a named/individual allocation of a matching-skill member — it's netted against named
+      allocations first, then the leftover reduces this pool directly. Click ▶ on a team to see the full,
+      un-netted breakdown of days per project assigned to it — useful to arbitrate how the team's time is
+      split across its projects.`)}</h2>
     ${capacityChart(series, y)}
     ${legend}
     <div class="calwrap">
       <table class="cal">${head}${rows.join("")}</table>
     </div>
-    <p class="muted" style="margin-top:10px">Remaining capacity = business days for the month at each person's
-    location (weekends and local public holidays excluded) − <b>approved</b> absences − project allocations
-    (% of the month, Projects tab)${capSmooth?" − remaining-leave simulation (see “~x” below)":""}.
-    Pending leave shows in orange ("−x ?") but only affects capacity once approved.
-    ${capSmooth?`The "~x" simulation spreads an estimate of remaining leave still to be taken evenly over the
-    remaining months of the year: for an <b>internal</b>, their remaining CP+RTT balance; for an <b>external</b>,
-    the gap between business days for the year and their worked-days target, minus what they've already taken —
-    an estimate of how many more days off they can take while still hitting their target. It's an indicative
-    projection, not an actual booking (uncheck the box to see only actual absences).`:""}
-    Remote work isn't deducted. A negative value (red) signals overcapacity. The "−x proj" note is project
-    workload (Projects tab) assigned to this team that isn't already covered by a named/individual allocation of
-    a matching-skill member — it's netted against named allocations first, then the leftover reduces this pool
-    directly. Click ▶ on a team to see the full, un-netted breakdown of days per project assigned to it — useful
-    to arbitrate how the team's time is split across its projects.</p>
   </div>`;
 }
 
@@ -1611,16 +1630,15 @@ function viewProjects(){
   </table></div>` : `<p class="muted">No projects yet — create the first one below.</p>`;
 
   const createHtml = `
-    <h2 style="margin-top:16px">➕ New project</h2>
+    <h2 style="margin-top:16px">➕ New project${info(`Team/skill targeting and the expected workload are set
+      up next, inside the project once it's created.`)}</h2>
     <div class="actions">
       <input id="proj-new-name" placeholder="Project name" style="max-width:200px">
       <label>From <input type="date" id="proj-new-start" value="${todayIso()}" style="max-width:150px"></label>
       <label>To <input type="date" id="proj-new-end" value="${iso(addDays(fromIso(todayIso()),365))}" style="max-width:150px"></label>
       <input id="proj-new-triskell" placeholder="Triskell code" style="max-width:150px">
       <button class="btn small" id="btn-add-proj">Create</button>
-    </div>
-    <p class="muted" style="margin-top:6px">Team/skill targeting and the expected workload are set up next,
-    inside the project once it's created.</p>`;
+    </div>`;
 
   let editorHtml = "";
   if(pr){
@@ -1730,11 +1748,11 @@ function viewProjects(){
         <button class="btn small ok" id="btn-save-proj-info">💾 Save</button>
       </div>
 
-      <h3 style="margin-top:20px">Expected workload by skill</h3>
-      <p class="muted">Total charge (in person-days), per skill — smoothed evenly across the project's
-      ${months.length||"—"} month(s) by default; edit any month below to override it, the remaining total then
-      re-balances automatically across the other months. A planned figure in red exceeds the matching team/skill's
-      available capacity that month ("—" = no team/skill target assigned yet for that skill, see below).</p>
+      <h3 style="margin-top:20px">Expected workload by skill${info(`Total charge (in person-days), per
+        skill — smoothed evenly across the project's ${months.length||"—"} month(s) by default; edit any
+        month below to override it, the remaining total then re-balances automatically across the other
+        months. A planned figure in red exceeds the matching team/skill's available capacity that month
+        ("—" = no team/skill target assigned yet for that skill, see below).`)}</h3>
       ${workloadBlocks || `<p class="muted">No workload line yet.</p>`}
       <div class="actions" style="margin-top:10px">
         <input id="wl-skill" list="wl-skill-dl" placeholder="Skill" style="max-width:180px">
@@ -1744,7 +1762,9 @@ function viewProjects(){
         <button class="btn small ok" id="btn-save-workloads">💾 Save workload changes</button>
       </div>
 
-      <h3 style="margin-top:20px">Team / skill targets</h3>
+      <h3 style="margin-top:20px">Team / skill targets${info(`Assigning a team/skill target here is what lets
+        the workload above compare itself to real, available capacity. A project can target several teams
+        and/or skills.`)}</h3>
       <table>
         <tr><th>Team</th><th>Skill</th><th></th></tr>
         ${targetsRows || `<tr><td colspan="3" class="muted">No target yet.</td></tr>`}
@@ -1755,13 +1775,12 @@ function viewProjects(){
         <datalist id="tgt-skill-dl">${tSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
         <button class="btn small" id="btn-add-target">Add a target</button>
       </div>
-      <p class="muted" style="margin-top:6px">Assigning a team/skill target here is what lets the workload above
-      compare itself to real, available capacity. A project can target several teams and/or skills.</p>
 
-      <h3 style="margin-top:20px">People allocated</h3>
-      <p class="muted" style="margin-top:-4px">A constant % applied across the whole project period
-      (${months.length||"—"} month(s)) by default; expand a person to fine-tune specific months, exactly like the
-      workload lines above.</p>
+      <h3 style="margin-top:20px">People allocated${info(`A constant % applied across the whole project
+        period (${months.length||"—"} month(s)) by default; expand a person to fine-tune specific months,
+        exactly like the workload lines above. Useful to force a specific person (e.g. cross-functional)
+        onto this project; that then reduces their capacity available for the team's other projects.
+        Remaining capacity (Capacity plan tab) deducts these allocations.`)}</h3>
       ${allocBlocks || `<p class="muted">No one allocated yet.</p>`}
       <div class="actions" style="margin-top:10px">
         <select id="proj-person-sel" style="max-width:240px">
@@ -1770,15 +1789,12 @@ function viewProjects(){
         <button class="btn small" id="proj-add-person" ${addable.length?"":"disabled"}>Add person</button>
         <button class="btn small ok" id="btn-save-alloc" ${allocated.length?"":"disabled"}>💾 Save allocations</button>
       </div>
-      <p class="muted" style="margin-top:8px">Useful to force a specific person (e.g. cross-functional) onto this
-      project; that then reduces their capacity available for the team's other projects. Remaining capacity
-      (Capacity plan tab) deducts these allocations.</p>
       ${overloads.length? `<div class="notice err" style="margin-top:8px"><b>Overallocation (&gt;100% across all projects):</b><br>${overloads.map(esc).join("<br>")}</div>`:""}
 
-      <h3 style="margin-top:20px">Bulk allocation — a whole team/skill target</h3>
-      ${targets.length? `<p class="muted">Allocates the same % in one go to every active person matching the chosen
-      target, over the selected months of ${y}. Each person stays individually editable above afterwards.</p>
-      <div class="actions">
+      <h3 style="margin-top:20px">Bulk allocation — a whole team/skill target${info(`Allocates the same %
+        in one go to every active person matching the chosen target, over the selected months. Each person
+        stays individually editable above afterwards.`)}</h3>
+      ${targets.length? `<div class="actions">
         <select id="bulk-target" style="max-width:260px">${bulkOptions}</select>
         <button class="btn small secondary" id="proj-prev">◀</button><b>${y}</b><button class="btn small secondary" id="proj-next">▶</button>
         <span class="muted">from</span> <select id="bulk-start-m" style="max-width:120px">${monthOpts(defStartM)}</select>
@@ -1791,9 +1807,8 @@ function viewProjects(){
 
   return `
   <div class="card">
-    <h2>📁 Projects</h2>
-    <p class="muted" style="margin-bottom:10px">Create a project with its dates and Triskell code, then define its
-    expected workload by skill and assign it to one or more team/skill targets.</p>
+    <h2>📁 Projects${info(`Create a project with its dates and Triskell code, then define its expected
+      workload by skill and assign it to one or more team/skill targets.`)}</h2>
     ${listHtml}
     ${createHtml}
   </div>
@@ -1874,7 +1889,10 @@ function viewTeam(){
   return `
   <div class="card">
     <div class="actions" style="margin-bottom:10px">
-      <h2 style="margin:0">👥 Teams &amp; balances — ${y}</h2>
+      <h2 style="margin:0">👥 Teams &amp; balances — ${y}${info(`Grouped by team (filterable above,
+        expand/collapse with the ▼/▶ button). "Projected" = business days for the year at each location
+        (${config.locations.map(l=>`${esc(l.name)}: ${businessDaysYear(l.id,y)} d`).join(" · ")}) minus
+        approved absences.`)}</h2>
       <select id="team-filter" style="max-width:220px">${teamOptions(teamViewFilter,true)}</select>
       <button class="btn small secondary" id="team-expand-all">Expand all</button>
       <button class="btn small secondary" id="team-collapse-all">Collapse all</button>
@@ -1886,15 +1904,11 @@ function viewTeam(){
           <th>Target worked days</th><th>Projected</th></tr>
       ${rowsHtml.join("")}
     </table></div>
-    <p class="muted" style="margin-top:8px">Grouped by team (filterable above, expand/collapse with the ▼/▶ button).
-    "Projected" = business days for the year at each location (${config.locations.map(l=>`${esc(l.name)}: ${businessDaysYear(l.id,y)} d`).join(" · ")})
-    minus approved absences.</p>
     <div style="margin-top:8px"><button class="btn secondary small" id="btn-export-csv">⬇ Export all requests (CSV)</button></div>
   </div>
   <div class="card">
-    <h2>➕ Submit an absence for a team member</h2>
-    <p class="muted">As an administrator, your entry is approved automatically
-    (handy for recording a sick leave or correcting a leave record).</p>
+    <h2>➕ Submit an absence for a team member${info(`As an administrator, your entry is approved
+      automatically (handy for recording a sick leave or correcting a leave record).`)}</h2>
     ${requestForm("af", true)}
   </div>`;
 }
@@ -1909,7 +1923,17 @@ function viewSettings(){
   const y = new Date().getFullYear();
   return `
   <div class="card">
-    <h2>👤 People</h2>
+    <h2>👤 People${info(`Cumulative profiles — with no box checked, a person has the <b>standard</b> profile:
+      submit/cancel their own requests and view the team schedule. <b>Admin</b> adds leave approval and
+      people/team/location management; <b>Project manager</b> adds the capacity plan and the Projects tab.
+      <b>Skill</b> (free text, e.g. Data engineering, Support, BA…) is used to target projects and to filter
+      the capacity plan. <b>End date</b> is the date a person leaves the team — from that date their capacity
+      contribution drops to zero (calendar, capacity plan, projects) without needing to deactivate them; leave
+      it blank if not applicable. <b>Remote exc.</b> grants the location's remote-work waiver bonus (e.g. +20
+      days at Paris) once approved by an admin. Windows login enables automatic sign-in via <b>Lancer.cmd</b>
+      (case-insensitive). Target d. = expected worked days for the year (default: internal
+      ${CONTRACTS.interne.target}, external ${CONTRACTS.externe.target}). "Deactivate" (uncheck Active) hides
+      the person without losing their history.`)}</h2>
     <div style="overflow-x:auto"><table>
       <tr><th>Name</th><th>Windows login</th><th>Profiles</th><th>Skill</th><th>Team</th><th>Location</th><th>Contract</th>
           <th>Paid leave/yr</th><th>RTT/yr</th><th>Target d.</th><th>End date</th><th>Remote exc.</th><th>Active</th><th></th></tr>
@@ -1939,22 +1963,16 @@ function viewSettings(){
       <button class="btn small" id="btn-add-person">Add</button>
       <button class="btn small ok" id="btn-save-people">💾 Save changes</button>
     </div>
-    <p class="muted" style="margin-top:8px">Cumulative profiles — with no box checked, a person has the
-    <b>standard</b> profile: submit/cancel their own requests and view the team schedule. <b>Admin</b> adds
-    leave approval and people/team/location management; <b>Project manager</b> adds the capacity
-    plan and the Projects tab. <b>Skill</b> (free text, e.g. Data engineering, Support, BA…) is used to
-    target projects and to filter the capacity plan. <b>End date</b> is the date a person leaves the team —
-    from that date their capacity contribution drops to zero (calendar, capacity plan, projects) without
-    needing to deactivate them; leave it blank if not applicable. <b>Remote exc.</b> grants the location's
-    remote-work waiver bonus (e.g. +20 days at Paris) once approved by an admin. Windows login enables
-    automatic sign-in via <b>Lancer.cmd</b> (case-insensitive).
-    Target d. = expected worked days for the year (default: internal ${CONTRACTS.interne.target}, external ${CONTRACTS.externe.target}).
-    "Deactivate" (uncheck Active) hides the person without losing their history.</p>
   </div>
 
   <div class="row">
     <div class="card">
-      <h2>🏢 Teams</h2>
+      <h2>🏢 Teams${info(`The trigram is shown before each person's first name wherever people are listed
+        (e.g. "${esc(config.teams[0]?.trigram||"ABC")}-${esc((activePeople().find(p=>p.teamId===config.teams[0]?.id)||{name:"FirstName"}).name)}").
+        <b>On-site day</b>: the team's mandatory in-office weekday. It's only enforced at locations with
+        "Enforce on-site days" checked (see Locations) — remote-work requests on that day then require admin
+        approval instead of being auto-recorded. A team can only be deleted once it has no active members
+        left.`)}</h2>
       <table>
         <tr><th>Name</th><th>Trigram</th><th>On-site day</th><th></th><th></th></tr>
         ${config.teams.map(t=>{
@@ -1972,16 +1990,13 @@ function viewSettings(){
         <button class="btn small" id="btn-add-team">Add</button>
         <button class="btn small ok" id="btn-save-teams">💾 Save</button>
       </div>
-      <p class="muted" style="margin-top:8px">The trigram is shown before each person's first name wherever
-      people are listed
-      (e.g. "${esc(config.teams[0]?.trigram||"ABC")}-${esc((activePeople().find(p=>p.teamId===config.teams[0]?.id)||{name:"FirstName"}).name)}").
-      <b>On-site day</b>: the team's mandatory in-office weekday. It's only enforced at locations with
-      "Enforce on-site days" checked (see Locations) — remote-work requests on that day then require admin
-      approval instead of being auto-recorded. A team can only be deleted once it has no active members left.</p>
     </div>
 
     <div class="card">
-      <h2>🌍 Locations &amp; public holidays</h2>
+      <h2>🌍 Locations &amp; public holidays${info(`Remote quota: yearly cap on remote-work days for people
+        at this location; leave blank for unlimited and untracked (no counter shown at all). Waiver bonus:
+        extra days added on top of the quota for a person with "Remote exc." checked (Settings → People).
+        "Enforce on-site days" turns on the teams' mandatory in-office weekday for people here.`)}</h2>
       <div class="actions" style="margin-bottom:10px">
         <select id="loc-select" style="max-width:220px">${locOptions(settingsLoc)}</select>
         <span class="muted">${config.locations.map(l=>esc(l.name)).join(" · ")}</span>
@@ -1995,10 +2010,6 @@ function viewSettings(){
         <label><input type="checkbox" id="loc-onsite-enforce" ${loc.enforceOnsiteDays?"checked":""}> Enforce on-site days</label>
         <button class="btn small ok" id="btn-save-loc-policy">💾 Save</button>
       </div>
-      <p class="muted" style="margin-top:-4px; margin-bottom:10px">Remote quota: yearly cap on remote-work
-      days for people at this location; leave blank for unlimited and untracked (no counter shown at all).
-      Waiver bonus: extra days added on top of the quota for a person with "Remote exc." checked (Settings →
-      People). "Enforce on-site days" turns on the teams' mandatory in-office weekday for people here.</p>
       <div class="actions" style="margin-bottom:10px">
         <input id="loc-year" type="number" value="${y+1}" style="max-width:100px">
         <button class="btn small" id="btn-gen-holidays" ${loc.gen && loc.gen!=="NONE"?"":"disabled"}>Generate ${esc(gen.label)} holidays</button>
