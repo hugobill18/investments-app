@@ -79,11 +79,12 @@ Les jours sont décomptés en **jours ouvrés selon le lieu de la personne** :
 un 14 juillet est férié pour Paris mais ouvré pour Kuala Lumpur, et
 inversement pour le Federal Territory Day.
 
-Par défaut, le **calendrier équipe** affiche le mois en cours à partir
-d'**aujourd'hui** (le passé du mois n'est pas montré) — un bouton « Show
-full month » permet de revoir le mois depuis le 1er si besoin ; naviguer
-vers un autre mois (◀ / ▶ / autre équipe) affiche toujours ce mois en
-entier.
+Le **calendrier équipe** affiche un **mois glissant** : par défaut, les 30
+jours (environ) à partir d'**aujourd'hui**, plutôt qu'un mois calendaire
+figé du 1er au dernier jour. ◀ / ▶ décalent la fenêtre d'un mois (dans un
+sens ou dans l'autre) et « Today » revient à aujourd'hui — pratique pour
+ne jamais avoir à regarder le passé par défaut, tout en pouvant se projeter
+en continu sans être bloqué aux frontières des mois calendaires.
 
 ### Regroupement par équipe, avec expand/collapse
 
@@ -141,8 +142,16 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
 ### Capacity plan (profil Chef de projet)
 
 - **Histogramme** de la capacité restante par équipe, mois par mois, puis le
-  détail chiffré en tableau ; en sélectionnant une équipe, détail par
-  personne avec filtre par **compétence**.
+  détail chiffré en tableau — une ligne par équipe.
+- **Filtre par équipe** : des cases à cocher « Teams: » permettent de
+  n'afficher qu'une ou plusieurs équipes (histogramme et tableau se
+  limitent alors aux équipes cochées) ; toutes cochées par défaut.
+- **▶ pour déplier une équipe** : révèle le détail par personne (avec un
+  filtre par **compétence** local à cette équipe), puis un bloc
+  « Projects impacting capacity » qui liste, projet par projet, la charge
+  qui contribue à l'annotation « −x proj » de cette équipe (mois par mois)
+  — de quoi voir immédiatement *quels* projets pèsent sur la capacité, pas
+  seulement de combien. Se replie avec ▼.
 - Capacité restante = jours ouvrés du mois selon le lieu de chacun −
   absences **validées** − affectations projets (% du mois). Les congés
   **en attente** apparaissent en orange (« −x ? ») mais n'impactent la
@@ -161,11 +170,11 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   pas une réservation réelle. Décocher la case revient aux seules absences
   actées.
 - **Charge projet non couverte** (annotation turquoise « −x proj ») : quand
-  un projet cible l'équipe/compétence affichée, la part de sa charge que les
+  un projet cible une équipe/compétence, la part de sa charge que les
   affectations nommées ne couvrent pas encore réduit directement la
-  capacité restante de l'équipe (ou de la personne sélectionnée en filtre
-  compétence). Voir « Projets & affectations » ci-dessous pour le détail du
-  calcul.
+  capacité restante de cette équipe — voir « Projects impacting capacity »
+  ci-dessus pour le détail par projet, et « Projets & affectations »
+  ci-dessous pour le détail du calcul.
 
 ### Projets & affectations (profil Chef de projet)
 

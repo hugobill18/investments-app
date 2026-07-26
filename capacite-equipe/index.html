@@ -199,6 +199,7 @@ const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
 const fromIso = s => { const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); };
 const fmtDate = s => { const d=fromIso(s); return d.toLocaleDateString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric"}); };
 const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+const addMonths = (d,n)=>{ const x=new Date(d); x.setMonth(x.getMonth()+n); return x; };
 const isWeekend = d => d.getDay()===0 || d.getDay()===6;
 const todayIso = () => iso(new Date());
 
@@ -411,13 +412,14 @@ let requests = [];
 let projects = [];
 let currentUser = null;
 let currentTab = "me";
-let calYear, calMonth, calTeam = "all", teamViewFilter = "all", settingsLoc = null, calShowPast = false;
-let capYear, capTeam = "all", capSkill = "all", capSmooth = true;
+let calStart, calTeam = "all", teamViewFilter = "all", settingsLoc = null;
+let capYear, capExcluded = new Set(), capSkillFilter = {}, capSmooth = true;
+let expandedCapaTeams = new Set();
 let projSel = null, projYear;
 let collapsedTeams = new Set();
 let expandedWorkloads = new Set(), expandedAllocs = new Set();
 const now = new Date();
-calYear = now.getFullYear(); calMonth = now.getMonth();
+calStart = todayIso();
 capYear = now.getFullYear(); projYear = now.getFullYear();
 const DETECTED_LOGIN = (new URLSearchParams(location.search).get("login")||"").trim();
 
@@ -698,34 +700,40 @@ function targetSkillCapacity(pr, skill, y, m){
 function allSkills(){
   return [...new Set(activePeople().map(p=>(p.skill||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"en"));
 }
-/* How much of a team's capacity a given month is committed to project
-   workload that ISN'T already covered by a named/individual allocation of
-   a matching-skill team member. Named allocations are netted out first
-   (they already reduce that person's own remaining capacity), so only the
-   leftover, unassigned share of the demand further reduces the team's
-   pool — this is what makes assigning a team/skill target to a project
-   actually show up in the Capacity plan. */
-function teamMonthUnassignedDemand(teamId,y,m,skillFilter){
-  let total = 0;
+/* Per-project, per-month breakdown of how much of a team's capacity is
+   committed to project workload that ISN'T already covered by a named/
+   individual allocation of a matching-skill team member. Named
+   allocations are netted out first (they already reduce that person's own
+   remaining capacity), so only the leftover, unassigned share of the
+   demand shows up here — this is both what makes assigning a team/skill
+   target to a project actually reduce the Capacity plan, and what lets a
+   PM see exactly which projects are behind that deduction. */
+function teamProjectDemandBreakdown(teamId,y,skillFilter){
+  const out = [];
   for(const pr of projects){
     if(pr.active===false) continue;
-    const months = projectMonths(pr);
-    const idx = months.findIndex(mo=>mo.y===y && mo.m===m);
-    if(idx<0) continue;
     const matchingTargets = (pr.targets||[]).filter(t=>t.teamId===teamId);
     if(!matchingTargets.length) continue;
+    const months = projectMonths(pr);
+    if(!months.length) continue;
     for(const w of (pr.workloads||[])){
       const skill = (w.skill||"").trim();
       if(skillFilter && skillFilter!=="all" && skill!==skillFilter) continue;
       if(!matchingTargets.some(t=>!t.skill || t.skill===skill)) continue;
-      const demand = workloadMonthlySeries(w, months)[idx];
-      if(!(demand>0)) continue;
-      const coverage = activePeople().filter(p=>p.teamId===teamId && (p.skill||"").trim()===skill)
-        .reduce((s,p)=>s+(personMonthAllocPct(p,y,m)/100)*personMonthOpen(p,y,m), 0);
-      total += Math.max(0, demand-coverage);
+      const series = workloadMonthlySeries(w, months);
+      const monthly = Array(12).fill(0);
+      months.forEach((mo,i)=>{
+        if(mo.y!==y || !(series[i]>0)) return;
+        const coverage = activePeople().filter(p=>p.teamId===teamId && (p.skill||"").trim()===skill)
+          .reduce((s,p)=>s+(personMonthAllocPct(p,y,mo.m)/100)*personMonthOpen(p,y,mo.m), 0);
+        monthly[mo.m] = Math.max(0, series[i]-coverage);
+      });
+      if(monthly.some(v=>v>0.001)){
+        out.push({projectId:pr.id, projectName:pr.name, skill, monthly, yearTotal:monthly.reduce((a,b)=>a+b,0)});
+      }
     }
   }
-  return total;
+  return out.sort((a,b)=>b.yearTotal-a.yearTotal);
 }
 
 /* Minimal IndexedDB wrapper to remember the chosen folder between launches */
@@ -1240,51 +1248,48 @@ function dayInfo(personId, dIso){
   return rs[0];
 }
 function viewCalendar(){
-  const y=calYear, m=calMonth;
-  const first = new Date(y,m,1), nDays = new Date(y,m+1,0).getDate();
-  const isCurrentMonth = y===now.getFullYear() && m===now.getMonth();
-  const startDay = (isCurrentMonth && !calShowPast) ? now.getDate() : 1;
+  const start = fromIso(calStart);
+  const end = addDays(addMonths(start,1), -1);
+  const days = [];
+  for(let d=new Date(start); d<=end; d=addDays(d,1)) days.push(new Date(d));
   let people = sortPeople(activePeople());
   if(calTeam!=="all") people = people.filter(p=>p.teamId===calTeam);
-  const monthName = first.toLocaleDateString("en-GB",{month:"long",year:"numeric"});
+  const rangeLabel = `${fmtDate(iso(start))} – ${fmtDate(iso(end))}`;
   const holByLoc = {};
   for(const l of config.locations) holByLoc[l.id] = locHolidaySet(l.id);
 
-  const daysHead = [];
-  for(let d=startDay; d<=nDays; d++){
-    const dt = new Date(y,m,d);
-    daysHead.push(`<th>${"SMTWTFS"[dt.getDay()]}<br>${d}</th>`);
-  }
+  const daysHead = days.map(dt=>{
+    const showMonth = dt.getDate()===1 || dt.getTime()===days[0].getTime();
+    return `<th>${"SMTWTFS"[dt.getDay()]}<br>${dt.getDate()}${showMonth?`<br><span class="muted" style="font-weight:400">${monthName(dt.getFullYear(),dt.getMonth(),true)}</span>`:""}</th>`;
+  }).join("");
   const teamsToShow = calTeam==="all" ? config.teams : config.teams.filter(t=>t.id===calTeam);
   const rows = [];
   for(const t of teamsToShow){
     const members = people.filter(p=>p.teamId===t.id);
     if(!members.length) continue;
-    rows.push(teamHeaderRow(t, members.length, nDays-startDay+2));
+    rows.push(teamHeaderRow(t, members.length, days.length+1));
     if(collapsedTeams.has(t.id)) continue;
     for(const p of members){
       const hs = holByLoc[p.locationId] || new Set();
-      const cells=[];
-      for(let d=startDay; d<=nDays; d++){
-        const dt=new Date(y,m,d), dIso=iso(dt);
-        if(p.endDate && dIso>p.endDate){ cells.push(`<td class="left" title="Left the team on ${fmtDate(p.endDate)}">·</td>`); continue; }
-        if(isWeekend(dt)){ cells.push(`<td class="we"></td>`); continue; }
-        if(hs.has(dIso)){ cells.push(`<td class="hol" title="${esc(locHolidayLabel(p.locationId,dIso)||'Public holiday')} (${esc(locById(p.locationId)?.name||'')})">H</td>`); continue; }
+      const cells = days.map(dt=>{
+        const dIso = iso(dt);
+        if(p.endDate && dIso>p.endDate) return `<td class="left" title="Left the team on ${fmtDate(p.endDate)}">·</td>`;
+        if(isWeekend(dt)) return `<td class="we"></td>`;
+        if(hs.has(dIso)) return `<td class="hol" title="${esc(locHolidayLabel(p.locationId,dIso)||'Public holiday')} (${esc(locById(p.locationId)?.name||'')})">H</td>`;
         const r = dayInfo(p.id,dIso);
-        if(!r){ cells.push(`<td></td>`); continue; }
+        if(!r) return `<td></td>`;
         const t2 = TYPES[r.type];
         const pend = r.status==="pending";
-        cells.push(`<td class="absent ${pend?'pending-cell':''}" style="background:${t2.hex}"
-          title="${t2.label}${pend?' (pending)':''} — ${esc(personLabel(p))}">${t2.letter}</td>`);
-      }
+        return `<td class="absent ${pend?'pending-cell':''}" style="background:${t2.hex}"
+          title="${t2.label}${pend?' (pending)':''} — ${esc(personLabel(p))}">${t2.letter}</td>`;
+      }).join("");
       const endNote = p.endDate ? ` · Ends ${fmtDate(p.endDate)}` : "";
-      rows.push(`<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(locById(p.locationId)?.name||"")} · ${esc(CONTRACTS[p.contract||"interne"].label)}${endNote}</span></td>${cells.join("")}</tr>`);
+      rows.push(`<tr><td class="person">${esc(personLabel(p))}<br><span class="sub">${esc(locById(p.locationId)?.name||"")} · ${esc(CONTRACTS[p.contract||"interne"].label)}${endNote}</span></td>${cells}</tr>`);
     }
   }
-  const capCells=[];
-  for(let d=startDay; d<=nDays; d++){
-    const dt=new Date(y,m,d), dIso=iso(dt);
-    if(isWeekend(dt)){ capCells.push(`<td class="we"></td>`); continue; }
+  const capCells = days.map(dt=>{
+    const dIso = iso(dt);
+    if(isWeekend(dt)) return `<td class="we"></td>`;
     let avail=0;
     for(const p of people){
       if(p.endDate && dIso>p.endDate) continue; // already left the team
@@ -1292,26 +1297,25 @@ function viewCalendar(){
       const r = dayInfo(p.id,dIso);
       if(!r || r.status!=="approved" || !TYPES[r.type].absent) avail++;
     }
-    capCells.push(`<td>${avail}</td>`);
-  }
+    return `<td>${avail}</td>`;
+  }).join("");
   return `
   <div class="card">
     <div class="actions" style="margin-bottom:12px">
       <button class="btn small secondary" id="cal-prev">◀</button>
-      <b style="min-width:160px; text-align:center; text-transform:capitalize">${monthName}</b>
+      <b style="min-width:200px; text-align:center">${rangeLabel}</b>
       <button class="btn small secondary" id="cal-next">▶</button>
       <button class="btn small secondary" id="cal-today">Today</button>
       <select id="cal-team" style="max-width:220px">${teamOptions(calTeam,true)}</select>
       <button class="btn small secondary" id="cal-expand-all">Expand all</button>
       <button class="btn small secondary" id="cal-collapse-all">Collapse all</button>
-      ${isCurrentMonth ? `<button class="btn small secondary" id="cal-toggle-past">${calShowPast?"Hide past days":"Show full month"}</button>` : ""}
-      <span class="muted">Shown: ${people.length}, grouped by team — dimmed cells = pending. Public holidays (H) depend on each person's location.</span>
+      <span class="muted">Rolling month from ${fmtDate(iso(start))} — Shown: ${people.length}, grouped by team — dimmed cells = pending. Public holidays (H) depend on each person's location.</span>
     </div>
     <div class="calwrap">
       <table class="cal">
-        <tr><th class="person">Person</th>${daysHead.join("")}</tr>
+        <tr><th class="person">Person</th>${daysHead}</tr>
         ${rows.join("")}
-        <tr class="caprow"><td class="person">Available</td>${capCells.join("")}</tr>
+        <tr class="caprow"><td class="person">Available</td>${capCells}</tr>
       </table>
     </div>
     <div class="legend">
@@ -1452,7 +1456,7 @@ function teamSkills(tid){
 function viewCapacity(){
   const y = capYear;
   const curM = (y===now.getFullYear()) ? now.getMonth() : -1;
-  const head = `<tr><th class="person">${capTeam==="all"?"Team":"Person"}</th>
+  const head = `<tr><th class="person">Team</th>
     ${[...Array(12)].map((_,m)=>`<th ${m===curM?'style="background:#dbeafe"':''}>${monthName(y,m,true)}</th>`).join("")}<th>Year</th></tr>`;
 
   const cell = (v,pend,smooth,demand,cur)=>{
@@ -1463,68 +1467,91 @@ function viewCapacity(){
     if(demand>0.001) notes += `<div class="demand-note" title="${fmtDays(demand)} day(s) of project workload not covered by a named allocation — deducted from this team/skill's pool">−${fmtDays(demand)} proj</div>`;
     return `<td${cur?' style="background:#eff6ff"':''}>${neg?`<span style="color:var(--danger); font-weight:700">${fmtDays(v)}</span>`:fmtDays(v)}${notes}</td>`;
   };
-  const mkRow = (label, sub, vals, pends, smooths, demands, strong)=>{
+  const mkRow = (label, sub, vals, pends, smooths, demands, opts)=>{
+    opts = opts||{};
     const sum = vals.reduce((s,v)=>s+v,0);
-    return `<tr${strong?' class="caprow"':''}><td class="person">${esc(label)}${sub?`<br><span class="sub">${esc(sub)}</span>`:""}</td>
+    const toggle = opts.toggleId ? `<button class="teamtoggle" data-capexpand="${opts.toggleId}" title="${expandedCapaTeams.has(opts.toggleId)?"Collapse":"Expand — see per-person detail and projects impacting capacity"}">${expandedCapaTeams.has(opts.toggleId)?"▼":"▶"}</button> ` : "";
+    return `<tr${opts.strong?' class="caprow"':''}><td class="person"${opts.indent?' style="padding-left:24px"':""}>${toggle}${esc(label)}${sub?`<br><span class="sub">${esc(sub)}</span>`:""}</td>
       ${vals.map((v,m)=>cell(v,pends?pends[m]:0,smooths?smooths[m]:0,demands?demands[m]:0,m===curM)).join("")}
+      <td><b>${fmtDays(sum)}</b></td></tr>`;
+  };
+  const demandRow = (label, sub, vals)=>{
+    const sum = vals.reduce((s,v)=>s+v,0);
+    return `<tr><td class="person" style="padding-left:24px">${esc(label)}${sub?`<br><span class="sub">${esc(sub)}</span>`:""}</td>
+      ${vals.map((v,m)=>`<td${m===curM?' style="background:#eff6ff"':''}>${v>0.001?fmtDays(v):"–"}</td>`).join("")}
       <td><b>${fmtDays(sum)}</b></td></tr>`;
   };
   let rows=[], series=[];
   let totals=Array(12).fill(0), pendTot=Array(12).fill(0), smoothTot=Array(12).fill(0), demandTot=Array(12).fill(0);
   const sumMonths = (members, fn)=>[...Array(12)].map((_,m)=>members.reduce((s,p)=>s+fn(p,y,m),0));
   const remainFn = (p,yy,m)=>personMonthRemaining(p,yy,m,capSmooth);
-  if(capTeam==="all"){
-    for(const t of config.teams){
-      const members = activePeople().filter(p=>p.teamId===t.id);
-      if(!members.length) continue;
-      const demands = [...Array(12)].map((_,m)=>teamMonthUnassignedDemand(t.id,y,m,"all"));
-      const vals = sumMonths(members, remainFn).map((v,m)=>v-demands[m]);
-      const pends = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
-      const smooths = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
-      series.push({label:t.name, color:teamColor(t.id), vals});
-      vals.forEach((v,m)=>totals[m]+=v); pends.forEach((v,m)=>pendTot[m]+=v);
-      smooths.forEach((v,m)=>smoothTot[m]+=v); demands.forEach((v,m)=>demandTot[m]+=v);
-      rows.push(mkRow(t.name, members.length+" pers.", vals, pends, capSmooth?smooths:null, demands));
+
+  const visibleTeams = config.teams.filter(t=>!capExcluded.has(t.id));
+  for(const t of visibleTeams){
+    const members = activePeople().filter(p=>p.teamId===t.id);
+    if(!members.length) continue;
+    const breakdown = teamProjectDemandBreakdown(t.id, y, "all");
+    const demands = Array(12).fill(0);
+    breakdown.forEach(b=>b.monthly.forEach((v,m)=>demands[m]+=v));
+    const vals = sumMonths(members, remainFn).map((v,m)=>v-demands[m]);
+    const pends = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
+    const smooths = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
+    series.push({label:t.name, color:teamColor(t.id), vals});
+    vals.forEach((v,m)=>totals[m]+=v); pends.forEach((v,m)=>pendTot[m]+=v);
+    smooths.forEach((v,m)=>smoothTot[m]+=v); demands.forEach((v,m)=>demandTot[m]+=v);
+    rows.push(mkRow(t.name, members.length+" pers.", vals, pends, capSmooth?smooths:null, demands, {toggleId:t.id}));
+
+    if(expandedCapaTeams.has(t.id)){
+      const skillFilter = capSkillFilter[t.id]||"all";
+      const teamSk = teamSkills(t.id);
+      if(teamSk.length){
+        rows.push(`<tr><td colspan="14" style="padding-left:24px"><span class="muted">Filter people/skill:</span>
+          <select data-capaskill="${t.id}" style="max-width:200px; display:inline-block; width:auto; margin-left:6px">
+            <option value="all" ${skillFilter==="all"?"selected":""}>All skills</option>
+            ${teamSk.map(s=>`<option value="${esc(s)}" ${skillFilter===s?"selected":""}>${esc(s)}</option>`).join("")}
+          </select></td></tr>`);
+      }
+      let subMembers = members;
+      if(skillFilter!=="all") subMembers = subMembers.filter(p=>(p.skill||"").trim()===skillFilter);
+      subMembers = sortPeople(subMembers);
+      for(const p of subMembers){
+        const pvals = [...Array(12)].map((_,m)=>personMonthRemaining(p,y,m,capSmooth));
+        const ppends = [...Array(12)].map((_,m)=>personMonthAbsent(p,y,m,"pending"));
+        const psmooths = [...Array(12)].map((_,m)=>personMonthSmoothLeave(p,y,m));
+        rows.push(mkRow(personLabel(p),
+          `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}${p.skill?` · ${p.skill}`:""}`,
+          pvals, ppends, capSmooth?psmooths:null, null, {indent:true}));
+      }
+      const shownBreakdown = skillFilter==="all" ? breakdown : breakdown.filter(b=>b.skill===skillFilter);
+      rows.push(`<tr><td colspan="14" style="padding-left:24px; padding-top:10px"><b>Projects impacting capacity</b></td></tr>`);
+      if(shownBreakdown.length){
+        for(const b of shownBreakdown) rows.push(demandRow(b.projectName, b.skill||"(no skill)", b.monthly));
+      }else{
+        rows.push(`<tr><td colspan="14" style="padding-left:24px"><span class="muted">No project workload currently impacts this team's capacity.</span></td></tr>`);
+      }
     }
-    rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, demandTot, true));
-  }else{
-    let members = activePeople().filter(p=>p.teamId===capTeam);
-    if(capSkill!=="all") members = members.filter(p=>(p.skill||"").trim()===capSkill);
-    members = sortPeople(members);
-    demandTot = [...Array(12)].map((_,m)=>teamMonthUnassignedDemand(capTeam,y,m,capSkill));
-    totals = sumMonths(members, remainFn).map((v,m)=>v-demandTot[m]);
-    pendTot = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
-    smoothTot = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
-    series.push({label:(teamById(capTeam)?.name||"")+(capSkill!=="all"?" · "+capSkill:""), color:teamColor(capTeam), vals:totals});
-    for(const p of members){
-      const vals = [...Array(12)].map((_,m)=>personMonthRemaining(p,y,m,capSmooth));
-      const pends = [...Array(12)].map((_,m)=>personMonthAbsent(p,y,m,"pending"));
-      const smooths = [...Array(12)].map((_,m)=>personMonthSmoothLeave(p,y,m));
-      rows.push(mkRow(personLabel(p),
-        `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}${p.skill?` · ${p.skill}`:""}`,
-        vals, pends, capSmooth?smooths:null));
-    }
-    rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, demandTot, true));
   }
-  const skills = capTeam==="all" ? [] : teamSkills(capTeam);
+  rows.push(mkRow("Total", null, totals, pendTot, capSmooth?smoothTot:null, demandTot, {strong:true}));
+
   const legend = series.length>1 ? `<div class="legend" style="margin:0 0 8px">
       ${series.map(s=>`<span><span class="sw" style="background:${s.color}"></span>${esc(s.label)}</span>`).join("")}
     </div>` : "";
+  const teamFilterChips = config.teams.map(t=>`<label>
+    <input type="checkbox" data-capteamfilter="${t.id}" ${capExcluded.has(t.id)?"":"checked"}> ${esc(t.name)}</label>`).join("");
   return `
   <div class="card">
     <div class="actions" style="margin-bottom:12px">
       <button class="btn small secondary" id="capa-prev">◀</button>
       <b style="min-width:60px; text-align:center">${y}</b>
       <button class="btn small secondary" id="capa-next">▶</button>
-      <select id="capa-team" style="max-width:240px">${teamOptions(capTeam,true)}</select>
-      ${capTeam!=="all" && skills.length ? `<select id="capa-skill" style="max-width:200px">
-        <option value="all">All skills</option>
-        ${skills.map(s=>`<option value="${esc(s)}" ${capSkill===s?"selected":""}>${esc(s)}</option>`).join("")}
-      </select>`:""}
       <label><input type="checkbox" id="capa-smooth" ${capSmooth?"checked":""}>
         Simulate remaining leave (smoothed over the year)</label>
     </div>
-    <h2>Remaining capacity ${capTeam==="all"?"by team":"— "+esc(teamById(capTeam)?.name||"")} (person-days)</h2>
+    <div class="actions" style="margin-bottom:12px">
+      <span class="muted">Teams:</span>
+      ${teamFilterChips}
+    </div>
+    <h2>Remaining capacity by team (person-days)</h2>
     ${capacityChart(series, y)}
     ${legend}
     <div class="calwrap">
@@ -1540,9 +1567,10 @@ function viewCapacity(){
     an estimate of how many more days off they can take while still hitting their target. It's an indicative
     projection, not an actual booking (uncheck the box to see only actual absences).`:""}
     Remote work isn't deducted. A negative value (red) signals overcapacity. The "−x proj" note is project
-    workload (Projects tab) assigned to this team/skill that isn't already covered by a named/individual
-    allocation of a matching-skill member — it's netted against named allocations first, then the leftover
-    reduces this pool directly.</p>
+    workload (Projects tab) assigned to this team that isn't already covered by a named/individual allocation of
+    a matching-skill member — it's netted against named allocations first, then the leftover reduces this pool
+    directly. Click ▶ on a team to see its per-person detail and exactly which projects are behind that
+    deduction.</p>
   </div>`;
 }
 
@@ -2094,16 +2122,27 @@ function bindAfterRender(){
     const c = prompt("Reason for rejection (optional):")||"";
     decide(b.dataset.reject,"rejected",c);
   });
-  if(q("cal-prev")) q("cal-prev").onclick = ()=>{ calMonth--; if(calMonth<0){calMonth=11;calYear--;} calShowPast=false; render(); };
-  if(q("cal-next")) q("cal-next").onclick = ()=>{ calMonth++; if(calMonth>11){calMonth=0;calYear++;} calShowPast=false; render(); };
-  if(q("cal-today")) q("cal-today").onclick = ()=>{ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); calShowPast=false; render(); };
-  if(q("cal-toggle-past")) q("cal-toggle-past").onclick = ()=>{ calShowPast=!calShowPast; render(); };
+  if(q("cal-prev")) q("cal-prev").onclick = ()=>{ calStart = iso(addMonths(fromIso(calStart), -1)); render(); };
+  if(q("cal-next")) q("cal-next").onclick = ()=>{ calStart = iso(addMonths(fromIso(calStart), 1)); render(); };
+  if(q("cal-today")) q("cal-today").onclick = ()=>{ calStart = todayIso(); render(); };
   if(q("cal-team")) q("cal-team").onchange = e=>{ calTeam=e.target.value; render(); };
   if(q("capa-prev")) q("capa-prev").onclick = ()=>{ capYear--; render(); };
   if(q("capa-next")) q("capa-next").onclick = ()=>{ capYear++; render(); };
-  if(q("capa-team")) q("capa-team").onchange = e=>{ capTeam=e.target.value; capSkill="all"; render(); };
-  if(q("capa-skill")) q("capa-skill").onchange = e=>{ capSkill=e.target.value; render(); };
   if(q("capa-smooth")) q("capa-smooth").onchange = e=>{ capSmooth=e.target.checked; render(); };
+  document.querySelectorAll("[data-capteamfilter]").forEach(cb=>cb.onchange=()=>{
+    const id = cb.dataset.capteamfilter;
+    if(cb.checked) capExcluded.delete(id); else capExcluded.add(id);
+    render();
+  });
+  document.querySelectorAll("[data-capexpand]").forEach(b=>b.onclick=()=>{
+    const id = b.dataset.capexpand;
+    if(expandedCapaTeams.has(id)) expandedCapaTeams.delete(id); else expandedCapaTeams.add(id);
+    render();
+  });
+  document.querySelectorAll("[data-capaskill]").forEach(sel=>sel.onchange=e=>{
+    capSkillFilter[sel.dataset.capaskill] = e.target.value;
+    render();
+  });
 
   /* Projects (project manager) */
   if(q("btn-add-proj")) q("btn-add-proj").onclick = async ()=>{
