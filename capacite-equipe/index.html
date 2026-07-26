@@ -2283,7 +2283,6 @@ function bindAfterRender(){
     pr.workloads = pr.workloads||[];
     const wl = {id:uid(), skill, days, monthlyOverride:{}};
     pr.workloads.push(wl);
-    expandedWorkloads.add(wl.id);
     await store.saveProject(pr);
     toast("Workload line added ✓"); render();
   };
