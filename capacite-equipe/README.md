@@ -75,6 +75,13 @@ Chaque membre peut, depuis **Mon espace (My space)** :
   calendar)** — avec la ligne « Disponibles » (**Available**, capacité par
   jour).
 
+**Annulation (croix ✕ dans « My requests & absences »)** : chacun peut
+annuler une de ses propres demandes tant qu'elle porte sur **aujourd'hui ou
+une date future**, quel que soit son statut (en attente ou déjà validée) —
+plans qui changent, erreur de saisie, etc. Un jour déjà passé ne peut en
+revanche être annulé/modifié que par un **administrateur** : une fois le
+jour révolu, ce n'est plus une auto-correction mais une donnée historique.
+
 Les jours sont décomptés en **jours ouvrés selon le lieu de la personne** :
 un 14 juillet est férié pour Paris mais ouvré pour Kuala Lumpur, et
 inversement pour le Federal Territory Day.
@@ -316,8 +323,9 @@ Chaque demande de télétravail issue d'une récurrence est marquée d'un 🔁
 dans « Mes demandes & absences » ; un bouton **« Cancel all N day(s) »**
 apparaît sur la première ligne du lot pour annuler toute la série en un
 clic (respecte les mêmes règles que l'annulation individuelle : un admin
-peut tout annuler, un membre standard les siens quel que soit leur
-statut).
+peut tout annuler, un membre standard uniquement les jours de la série qui
+ne sont pas encore passés — les jours déjà passés de la série, eux,
+restent et ne peuvent être retirés que par un administrateur).
 
 **Annulation et recrédit automatiques.** Quand une vraie absence est
 posée — congé payé, RTT, arrêt maladie, absence imprévue, congé sans

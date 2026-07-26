@@ -202,6 +202,10 @@ const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x
 const addMonths = (d,n)=>{ const x=new Date(d); x.setMonth(x.getMonth()+n); return x; };
 const isWeekend = d => d.getDay()===0 || d.getDay()===6;
 const todayIso = () => iso(new Date());
+/* A request can be self-cancelled by its owner only if it hasn't started
+   yet (today counts as "not started") — once a day has already happened,
+   only an administrator can touch it. */
+const isUpcoming = r => r.start>=todayIso();
 
 function easterSunday(y){ // Butcher's algorithm
   const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),
@@ -1023,8 +1027,8 @@ async function createRecurringRemote({personId, start, end, weekdays, comment}){
 async function removeRecurrence(recurrenceId){
   const items = requests.filter(r=>r.recurrenceId===recurrenceId);
   if(!items.length) return;
-  const eligible = items.filter(r=> isAdmin() || r.personId===currentUser.id);
-  if(!eligible.length) return alert("None of these days can be cancelled by you (only your own days can be cancelled).");
+  const eligible = items.filter(r=> isAdmin() || (r.personId===currentUser.id && isUpcoming(r)));
+  if(!eligible.length) return alert("None of these days can be cancelled by you (only your own, not-yet-started days can be cancelled — past days need an administrator).");
   if(!confirm(`Cancel ${eligible.length} of ${items.length} day(s) in this recurring remote-work series?`)) return;
   for(const r of eligible){ await store.deleteRequest(r.id); }
   const removedIds = new Set(eligible.map(r=>r.id));
@@ -1044,8 +1048,8 @@ async function decide(id, status, comment){
 async function removeRequest(id){
   const r = requests.find(x=>x.id===id); if(!r) return;
   const own = r.personId===currentUser.id;
-  if(!isAdmin() && !own)
-    return alert("You can only cancel your own requests.");
+  if(!isAdmin() && !(own && isUpcoming(r)))
+    return alert("You can only cancel your own requests that haven't started yet — a past day needs an administrator.");
   if(!confirm("Delete / cancel this request?")) return;
   await store.deleteRequest(id);
   requests = requests.filter(x=>x.id!==id);
@@ -1181,7 +1185,7 @@ function requestRow(r, showPerson, allRows){
   const p = personById(r.personId);
   const days = p? openDaysP(r.start,r.end,r.half,p) : 0;
   const own = r.personId===currentUser.id;
-  const canCancel = isAdmin() || own;
+  const canCancel = isAdmin() || (own && isUpcoming(r));
   let recurTag = "";
   if(r.recurrenceId && allRows){
     const siblings = allRows.filter(x=>x.recurrenceId===r.recurrenceId);
