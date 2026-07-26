@@ -628,13 +628,20 @@ function migrateProject(p){
     p.endDate = p.endDate || dueDates[dueDates.length-1] || iso(addDays(fromIso(todayIso()),365));
   }
   if(p.triskellCode===undefined) p.triskellCode = "";
-  p.workloads = p.workloads.map(w=>({
-    id: w.id || uid(),
-    skill: w.skill||"",
-    internalDays: w.internalDays!=null ? w.internalDays : (w.remainingDays||0),
-    externalDays: w.externalDays!=null ? w.externalDays : 0,
-    monthlyOverride: w.monthlyOverride || {},
-  }));
+  // v3 -> v4: workloads drop the internal/external split — a single total
+  // (and a flat per-month override, instead of {internal,external}).
+  p.workloads = p.workloads.map(w=>{
+    const days = w.days!=null ? w.days
+      : (w.internalDays!=null || w.externalDays!=null) ? (w.internalDays||0)+(w.externalDays||0)
+      : (w.remainingDays||0);
+    let monthlyOverride = w.monthlyOverride || {};
+    const flattened = {};
+    for(const key of Object.keys(monthlyOverride)){
+      const v = monthlyOverride[key];
+      flattened[key] = (v && typeof v==="object") ? (v.internal||0)+(v.external||0) : v;
+    }
+    return {id: w.id || uid(), skill: w.skill||"", days, monthlyOverride: flattened};
+  });
   // v3 -> v4: per-person allocation moves from a flat {monthKey:pct} map to a
   // constant %-per-month plus a sparse monthly override, mirroring workloads.
   if(p.allocations){
@@ -664,31 +671,28 @@ function projectMonths(pr){
   }
   return out;
 }
-/* Per-month planned days for one contract type of a workload line: any
-   month the PM has overridden keeps that value; the remaining total (line
-   total minus the sum of overrides) is split evenly across the
-   non-overridden months — so overriding a few months doesn't require
-   re-balancing the rest by hand. */
-function workloadMonthlySeries(w, months, kind){
-  const field = kind==="internal" ? "internalDays" : "externalDays";
-  const total = w[field]||0;
+/* Per-month planned days for a workload line: any month the PM has
+   overridden keeps that value; the remaining total (line total minus the
+   sum of overrides) is split evenly across the non-overridden months — so
+   overriding a few months doesn't require re-balancing the rest by hand. */
+function workloadMonthlySeries(w, months){
+  const total = w.days||0;
   const n = months.length;
   if(n===0) return [];
-  const overrides = months.map(mo => w.monthlyOverride?.[mo.key]?.[kind]);
+  const overrides = months.map(mo => w.monthlyOverride?.[mo.key]);
   const overrideSum = overrides.reduce((s,v)=>s+(v!=null?v:0),0);
   const overrideCount = overrides.filter(v=>v!=null).length;
   const evenShare = (n-overrideCount)>0 ? Math.max(0,total-overrideSum)/(n-overrideCount) : 0;
   return months.map((mo,i)=> overrides[i]!=null ? overrides[i] : evenShare);
 }
 /* Aggregate remaining capacity (person-days) of the active people who
-   match one of the project's targets for a given skill and contract
-   type — null if no target has been assigned for that skill yet. */
-function targetSkillCapacity(pr, skill, y, m, kind){
+   match one of the project's targets for a given skill — null if no
+   target has been assigned for that skill yet. */
+function targetSkillCapacity(pr, skill, y, m){
   const matching = (pr.targets||[]).filter(t=>!t.skill || t.skill===skill);
   if(!matching.length) return null;
   const teamIds = new Set(matching.map(t=>t.teamId));
-  const people = activePeople().filter(p=>teamIds.has(p.teamId) && (p.skill||"").trim()===skill &&
-    (kind==="internal" ? p.contract!=="externe" : p.contract==="externe"));
+  const people = activePeople().filter(p=>teamIds.has(p.teamId) && (p.skill||"").trim()===skill);
   return people.reduce((s,p)=>s+Math.max(0,personMonthRemaining(p,y,m,false)),0);
 }
 function allSkills(){
@@ -714,14 +718,11 @@ function teamMonthUnassignedDemand(teamId,y,m,skillFilter){
       const skill = (w.skill||"").trim();
       if(skillFilter && skillFilter!=="all" && skill!==skillFilter) continue;
       if(!matchingTargets.some(t=>!t.skill || t.skill===skill)) continue;
-      for(const kind of ["internal","external"]){
-        const demand = workloadMonthlySeries(w, months, kind)[idx];
-        if(!(demand>0)) continue;
-        const coverage = activePeople().filter(p=>p.teamId===teamId && (p.skill||"").trim()===skill &&
-          (kind==="internal" ? p.contract!=="externe" : p.contract==="externe"))
-          .reduce((s,p)=>s+(personMonthAllocPct(p,y,m)/100)*personMonthOpen(p,y,m), 0);
-        total += Math.max(0, demand-coverage);
-      }
+      const demand = workloadMonthlySeries(w, months)[idx];
+      if(!(demand>0)) continue;
+      const coverage = activePeople().filter(p=>p.teamId===teamId && (p.skill||"").trim()===skill)
+        .reduce((s,p)=>s+(personMonthAllocPct(p,y,m)/100)*personMonthOpen(p,y,m), 0);
+      total += Math.max(0, demand-coverage);
     }
   }
   return total;
@@ -1641,23 +1642,21 @@ function viewProjects(){
 
     const workloadBlocks = (pr.workloads||[]).map(w=>{
       if(!months.length) return `<div class="notice err" style="margin-top:10px">Set a valid project start/end date to plan "${esc(w.skill||"(unnamed)")}".</div>`;
-      const intSeries = workloadMonthlySeries(w, months, "internal");
-      const extSeries = workloadMonthlySeries(w, months, "external");
-      const isOver = (kind, series) => months.some((mo,i)=>{
-        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m, kind);
+      const series = workloadMonthlySeries(w, months);
+      const over = months.some((mo,i)=>{
+        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m);
         return cap!=null && series[i]>cap+0.001;
       });
-      const over = isOver("internal", intSeries) || isOver("external", extSeries);
       const expanded = expandedWorkloads.has(w.id);
-      const plannedRow = (kind, series) => months.map((mo,i)=>{
-        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m, kind);
+      const plannedRow = months.map((mo,i)=>{
+        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m);
         const overCell = cap!=null && series[i]>cap+0.001;
         return `<td><input type="number" min="0" step="0.5" style="width:56px; text-align:right; ${overCell?'color:var(--danger); font-weight:700;':''}"
-          data-wlmonth="${w.id}|${mo.key}|${kind}" value="${fmtDays(series[i])}"
+          data-wlmonth="${w.id}|${mo.key}" value="${fmtDays(series[i])}"
           title="${cap!=null?`Available capacity: ${fmtDays(cap)} d`:'No team/skill target assigned for this skill yet'}"></td>`;
       }).join("");
-      const capRow = (kind) => months.map(mo=>{
-        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m, kind);
+      const capRow = months.map(mo=>{
+        const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m);
         return `<td class="muted">${cap==null?"—":fmtDays(cap)}</td>`;
       }).join("");
       return `
@@ -1665,11 +1664,10 @@ function viewProjects(){
         <div class="actions">
           <button class="teamtoggle" data-wltoggle="${w.id}" title="${expanded?"Collapse":"Expand monthly detail"}">${expanded?"▼":"▶"}</button>
           <b>${esc(w.skill||"(unnamed skill)")}</b>
-          <span class="muted">Internal ${fmtDays(w.internalDays||0)} d · External ${fmtDays(w.externalDays||0)} d</span>
+          <span class="muted">${fmtDays(w.days||0)} d</span>
           ${over?`<span class="pill" style="background:var(--danger)">Over capacity</span>`:""}
           ${expanded?`
-          <label>Internal total <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}|internal" value="${w.internalDays||0}"></label>
-          <label>External total <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}|external" value="${w.externalDays||0}"></label>
+          <label>Total days <input type="number" min="0" step="0.5" style="width:80px" data-wltotal="${w.id}" value="${w.days||0}"></label>
           <button class="btn small secondary" data-wlreset="${w.id}">↺ Reset to even split</button>`:""}
           <button class="btn small danger" data-wldel="${w.id}">✕ Delete line</button>
         </div>
@@ -1677,10 +1675,8 @@ function viewProjects(){
         <div class="calwrap" style="margin-top:8px">
           <table class="cal">
             <tr><th class="person">Month</th>${months.map(mo=>`<th>${monthName(mo.y,mo.m,true)} ${mo.y}</th>`).join("")}</tr>
-            <tr><td class="person">Internal planned (d)</td>${plannedRow("internal", intSeries)}</tr>
-            <tr><td class="person">Internal capacity (d)</td>${capRow("internal")}</tr>
-            <tr><td class="person">External planned (d)</td>${plannedRow("external", extSeries)}</tr>
-            <tr><td class="person">External capacity (d)</td>${capRow("external")}</tr>
+            <tr><td class="person">Planned (d)</td>${plannedRow}</tr>
+            <tr><td class="person">Capacity (d)</td>${capRow}</tr>
           </table>
         </div>`:""}
       </div>`;
@@ -1700,17 +1696,15 @@ function viewProjects(){
       </div>
 
       <h3 style="margin-top:20px">Expected workload by skill</h3>
-      <p class="muted">Total charge (in person-days), per skill, split between internal and external resources —
-      smoothed evenly across the project's ${months.length||"—"} month(s) by default; edit any month below to
-      override it, the remaining total then re-balances automatically across the other months. A planned figure in
-      red exceeds the matching team/skill's available capacity that month ("—" = no team/skill target assigned yet
-      for that skill, see below).</p>
+      <p class="muted">Total charge (in person-days), per skill — smoothed evenly across the project's
+      ${months.length||"—"} month(s) by default; edit any month below to override it, the remaining total then
+      re-balances automatically across the other months. A planned figure in red exceeds the matching team/skill's
+      available capacity that month ("—" = no team/skill target assigned yet for that skill, see below).</p>
       ${workloadBlocks || `<p class="muted">No workload line yet.</p>`}
       <div class="actions" style="margin-top:10px">
         <input id="wl-skill" list="wl-skill-dl" placeholder="Skill" style="max-width:180px">
         <datalist id="wl-skill-dl">${wSkills.map(s=>`<option value="${esc(s)}">`).join("")}</datalist>
-        <input type="number" id="wl-internal" min="0" step="0.5" placeholder="Internal days" style="max-width:120px">
-        <input type="number" id="wl-external" min="0" step="0.5" placeholder="External days" style="max-width:120px">
+        <input type="number" id="wl-days" min="0" step="0.5" placeholder="Total days" style="max-width:120px">
         <button class="btn small" id="btn-add-workload">Add line</button>
         <button class="btn small ok" id="btn-save-workloads">💾 Save workload changes</button>
       </div>
@@ -2247,10 +2241,9 @@ function bindAfterRender(){
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
     const skill = q("wl-skill").value.trim();
     if(!skill) return alert("Enter a skill.");
-    const internalDays = Math.max(0, parseFloat(q("wl-internal").value)||0);
-    const externalDays = Math.max(0, parseFloat(q("wl-external").value)||0);
+    const days = Math.max(0, parseFloat(q("wl-days").value)||0);
     pr.workloads = pr.workloads||[];
-    const wl = {id:uid(), skill, internalDays, externalDays, monthlyOverride:{}};
+    const wl = {id:uid(), skill, days, monthlyOverride:{}};
     pr.workloads.push(wl);
     expandedWorkloads.add(wl.id);
     await store.saveProject(pr);
@@ -2266,18 +2259,15 @@ function bindAfterRender(){
     if(!isCdp()) return;
     const pr = projects.find(x=>x.id===projSel); if(!pr) return;
     document.querySelectorAll("[data-wltotal]").forEach(inp=>{
-      const [wid,kind] = inp.dataset.wltotal.split("|");
-      const w = (pr.workloads||[]).find(x=>x.id===wid); if(!w) return;
-      const v = Math.max(0, parseFloat(inp.value)||0);
-      if(kind==="internal") w.internalDays = v; else w.externalDays = v;
+      const w = (pr.workloads||[]).find(x=>x.id===inp.dataset.wltotal); if(!w) return;
+      w.days = Math.max(0, parseFloat(inp.value)||0);
     });
     document.querySelectorAll("[data-wlmonth]").forEach(inp=>{
       if(inp.dataset.touched!=="1") return;
-      const [wid,key,kind] = inp.dataset.wlmonth.split("|");
+      const [wid,key] = inp.dataset.wlmonth.split("|");
       const w = (pr.workloads||[]).find(x=>x.id===wid); if(!w) return;
       w.monthlyOverride = w.monthlyOverride||{};
-      w.monthlyOverride[key] = w.monthlyOverride[key]||{};
-      w.monthlyOverride[key][kind] = Math.max(0, parseFloat(inp.value)||0);
+      w.monthlyOverride[key] = Math.max(0, parseFloat(inp.value)||0);
     });
     await store.saveProject(pr);
     toast("Workloads saved ✓"); render();

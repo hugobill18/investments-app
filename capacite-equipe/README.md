@@ -175,26 +175,26 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   compétence ne sont demandées à ce stade.
 - **Charge attendue par compétence** : une fois le projet créé, on ajoute
   une ligne de charge par compétence (« Expected workload by skill ») avec
-  un **total de jours interne** et un **total de jours externe**. Par
-  défaut cette charge est **lissée uniformément** sur tous les mois du
-  projet (total ÷ nombre de mois). Le chef de projet peut **surcharger un
-  mois précis** (le reste se rééquilibre automatiquement sur les mois non
-  modifiés) ou tout réinitialiser au lissage uniforme (« ↺ Reset to even
-  split »). Chaque ligne de charge est **repliée par défaut** (résumé :
-  compétence, totaux interne/externe, pastille « Over capacity » si un mois
-  dépasse la capacité) ; cliquer sur ▶ déplie la ligne pour éditer les
-  totaux et le détail mois par mois.
+  un **total de jours** (pas de distinction interne/externe à ce niveau —
+  la charge est un besoin brut par compétence). Par défaut cette charge est
+  **lissée uniformément** sur tous les mois du projet (total ÷ nombre de
+  mois). Le chef de projet peut **surcharger un mois précis** (le reste se
+  rééquilibre automatiquement sur les mois non modifiés) ou tout
+  réinitialiser au lissage uniforme (« ↺ Reset to even split »). Chaque
+  ligne de charge est **repliée par défaut** (résumé : compétence, total,
+  pastille « Over capacity » si un mois dépasse la capacité) ; cliquer sur
+  ▶ déplie la ligne pour éditer le total et le détail mois par mois.
 - **Cibles équipe/compétence** : un projet peut viser **plusieurs cibles
   équipe/compétence** (bloc « Team / skill targets » — en ajouter, en
   retirer ; laisser la compétence vide vise toute l'équipe). Dès qu'une
   cible correspond à la compétence d'une ligne de charge, la charge
   planifiée est comparée à la **capacité disponible agrégée** de toutes les
   personnes actives de cette équipe/compétence (jours ouvrés − absences
-  validées − autres affectations), séparément pour interne et externe. Un
-  mois où la charge planifiée dépasse la capacité disponible s'affiche en
-  rouge ; « — » signifie qu'aucune cible ne correspond encore à cette
-  compétence. **Assigner une cible réduit aussi le capacity plan de
-  l'équipe** (voir plus bas) : ce n'est pas qu'un contrôle visuel.
+  validées − autres affectations), tous contrats confondus. Un mois où la
+  charge planifiée dépasse la capacité disponible s'affiche en rouge ;
+  « — » signifie qu'aucune cible ne correspond encore à cette compétence.
+  **Assigner une cible réduit aussi le capacity plan de l'équipe** (voir
+  plus bas) : ce n'est pas qu'un contrôle visuel.
 - Deux façons d'affecter des personnes **nommément**, combinables (utile
   notamment pour forcer une personne transverse sur un % donné) :
   - **Affectation groupée** : on choisit UNE des cibles du projet, un % et
@@ -220,11 +220,10 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   « −x proj » sous la valeur, comme les congés en attente ou la
   simulation). Le calcul priorise les **affectations nommées** : la charge
   du projet est d'abord comparée à ce que les personnes de l'équipe ayant
-  la bonne compétence (et le bon type de contrat, interne/externe) ont
-  déjà individuellement affecté ; seule la part **non couverte** par ces
-  affectations nommées vient ensuite réduire le pool global de l'équipe —
-  pas de double comptage, puisque l'affectation nommée réduit déjà la
-  capacité de la personne concernée.
+  la bonne compétence ont déjà individuellement affecté ; seule la part
+  **non couverte** par ces affectations nommées vient ensuite réduire le
+  pool global de l'équipe — pas de double comptage, puisque l'affectation
+  nommée réduit déjà la capacité de la personne concernée.
 - Stockage : un fichier JSON par projet (`projects/proj_*.json`), même
   logique anti-conflits que les demandes.
 
