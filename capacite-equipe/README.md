@@ -199,11 +199,14 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
   cible correspond à la compétence d'une ligne de charge, la charge
   planifiée est comparée à la **capacité disponible agrégée** de toutes les
   personnes actives de cette équipe/compétence (jours ouvrés − absences
-  validées − autres affectations), tous contrats confondus. Un mois où la
-  charge planifiée dépasse la capacité disponible s'affiche en rouge ;
-  « — » signifie qu'aucune cible ne correspond encore à cette compétence.
-  **Assigner une cible réduit aussi le capacity plan de l'équipe** (voir
-  plus bas) : ce n'est pas qu'un contrôle visuel.
+  validées − autres affectations), tous contrats confondus — **après avoir
+  d'abord déduit ce que les affectations nommées de cette équipe/compétence
+  couvrent déjà** (une personne affectée en nom propre sur ce projet ne
+  compte donc pas en trop : sa part couvre la charge au lieu de venir en
+  plus). Un mois où la charge *non couverte* dépasse la capacité disponible
+  s'affiche en rouge ; « — » signifie qu'aucune cible ne correspond encore à
+  cette compétence. **Assigner une cible réduit aussi le capacity plan de
+  l'équipe** (voir plus bas) : ce n'est pas qu'un contrôle visuel.
 - Deux façons d'affecter des personnes **nommément**, combinables (utile
   notamment pour forcer une personne transverse sur un % donné) :
   - **Affectation groupée** : on choisit UNE des cibles du projet, un % et

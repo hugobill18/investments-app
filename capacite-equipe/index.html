@@ -697,6 +697,19 @@ function targetSkillCapacity(pr, skill, y, m){
   const people = activePeople().filter(p=>teamIds.has(p.teamId) && (p.skill||"").trim()===skill);
   return people.reduce((s,p)=>s+Math.max(0,personMonthRemaining(p,y,m,false)),0);
 }
+/* Day-equivalent of every named/individual allocation already sitting on
+   the same team/skill pool a workload line draws from — a person named
+   onto THIS project already counts as covering that much of the demand,
+   so it must not also be required to come out of the pool's spare
+   capacity a second time (that double-counting is what used to flag a
+   named, actually-available allocation as "over capacity"). */
+function targetSkillCoverage(pr, skill, y, m){
+  const matching = (pr.targets||[]).filter(t=>!t.skill || t.skill===skill);
+  if(!matching.length) return 0;
+  const teamIds = new Set(matching.map(t=>t.teamId));
+  const people = activePeople().filter(p=>teamIds.has(p.teamId) && (p.skill||"").trim()===skill);
+  return people.reduce((s,p)=>s+(personMonthAllocPct(p,y,m)/100)*personMonthOpen(p,y,m), 0);
+}
 function allSkills(){
   return [...new Set(activePeople().map(p=>(p.skill||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"en"));
 }
@@ -1671,17 +1684,25 @@ function viewProjects(){
     const workloadBlocks = (pr.workloads||[]).map(w=>{
       if(!months.length) return `<div class="notice err" style="margin-top:10px">Set a valid project start/end date to plan "${esc(w.skill||"(unnamed)")}".</div>`;
       const series = workloadMonthlySeries(w, months);
+      // A planned figure only exceeds capacity once whatever is already covered by a
+      // named/individual allocation on the matching team/skill is subtracted first —
+      // otherwise a person deliberately allocated to this project gets double-counted
+      // against the pool's spare capacity.
+      const unassignedAt = (mo,i) => {
+        const coverage = targetSkillCoverage(pr, w.skill, mo.y, mo.m);
+        return Math.max(0, series[i]-coverage);
+      };
       const over = months.some((mo,i)=>{
         const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m);
-        return cap!=null && series[i]>cap+0.001;
+        return cap!=null && unassignedAt(mo,i)>cap+0.001;
       });
       const expanded = expandedWorkloads.has(w.id);
       const plannedRow = months.map((mo,i)=>{
         const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m);
-        const overCell = cap!=null && series[i]>cap+0.001;
+        const overCell = cap!=null && unassignedAt(mo,i)>cap+0.001;
         return `<td><input type="number" min="0" step="0.5" style="width:56px; text-align:right; ${overCell?'color:var(--danger); font-weight:700;':''}"
           data-wlmonth="${w.id}|${mo.key}" value="${fmtDays(series[i])}"
-          title="${cap!=null?`Available capacity: ${fmtDays(cap)} d`:'No team/skill target assigned for this skill yet'}"></td>`;
+          title="${cap!=null?`Available capacity: ${fmtDays(cap)} d (after named allocations already covering part of the demand)`:'No team/skill target assigned for this skill yet'}"></td>`;
       }).join("");
       const capRow = months.map(mo=>{
         const cap = targetSkillCapacity(pr, w.skill, mo.y, mo.m);
