@@ -1023,8 +1023,8 @@ async function createRecurringRemote({personId, start, end, weekdays, comment}){
 async function removeRecurrence(recurrenceId){
   const items = requests.filter(r=>r.recurrenceId===recurrenceId);
   if(!items.length) return;
-  const eligible = items.filter(r=> isAdmin() || (r.personId===currentUser.id && r.status==="pending"));
-  if(!eligible.length) return alert("None of these days can be cancelled by you (only your own still-pending days can be cancelled).");
+  const eligible = items.filter(r=> isAdmin() || r.personId===currentUser.id);
+  if(!eligible.length) return alert("None of these days can be cancelled by you (only your own days can be cancelled).");
   if(!confirm(`Cancel ${eligible.length} of ${items.length} day(s) in this recurring remote-work series?`)) return;
   for(const r of eligible){ await store.deleteRequest(r.id); }
   const removedIds = new Set(eligible.map(r=>r.id));
@@ -1044,8 +1044,8 @@ async function decide(id, status, comment){
 async function removeRequest(id){
   const r = requests.find(x=>x.id===id); if(!r) return;
   const own = r.personId===currentUser.id;
-  if(!isAdmin() && !(own && r.status==="pending"))
-    return alert("You can only cancel your own requests while they're still pending.");
+  if(!isAdmin() && !own)
+    return alert("You can only cancel your own requests.");
   if(!confirm("Delete / cancel this request?")) return;
   await store.deleteRequest(id);
   requests = requests.filter(x=>x.id!==id);
@@ -1181,7 +1181,7 @@ function requestRow(r, showPerson, allRows){
   const p = personById(r.personId);
   const days = p? openDaysP(r.start,r.end,r.half,p) : 0;
   const own = r.personId===currentUser.id;
-  const canCancel = isAdmin() || (own && r.status==="pending");
+  const canCancel = isAdmin() || own;
   let recurTag = "";
   if(r.recurrenceId && allRows){
     const siblings = allRows.filter(x=>x.recurrenceId===r.recurrenceId);

@@ -316,8 +316,8 @@ Chaque demande de télétravail issue d'une récurrence est marquée d'un 🔁
 dans « Mes demandes & absences » ; un bouton **« Cancel all N day(s) »**
 apparaît sur la première ligne du lot pour annuler toute la série en un
 clic (respecte les mêmes règles que l'annulation individuelle : un admin
-peut tout annuler, un membre standard uniquement les jours encore « En
-attente » des siens).
+peut tout annuler, un membre standard les siens quel que soit leur
+statut).
 
 **Annulation et recrédit automatiques.** Quand une vraie absence est
 posée — congé payé, RTT, arrêt maladie, absence imprévue, congé sans
