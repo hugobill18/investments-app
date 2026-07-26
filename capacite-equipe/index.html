@@ -413,7 +413,7 @@ let projects = [];
 let currentUser = null;
 let currentTab = "me";
 let calStart, calTeam = "all", teamViewFilter = "all", settingsLoc = null;
-let capYear, capExcluded = new Set(), capSkillFilter = {}, capSmooth = true;
+let capYear, capExcluded = new Set(), capSmooth = true;
 let expandedCapaTeams = new Set();
 let projSel = null, projYear;
 let collapsedTeams = new Set();
@@ -713,15 +713,16 @@ function targetSkillCoverage(pr, skill, y, m){
 function allSkills(){
   return [...new Set(activePeople().map(p=>(p.skill||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"en"));
 }
-/* Per-project, per-month breakdown of how much of a team's capacity is
-   committed to project workload that ISN'T already covered by a named/
-   individual allocation of a matching-skill team member. Named
-   allocations are netted out first (they already reduce that person's own
-   remaining capacity), so only the leftover, unassigned share of the
-   demand shows up here — this is both what makes assigning a team/skill
-   target to a project actually reduce the Capacity plan, and what lets a
-   PM see exactly which projects are behind that deduction. */
-function teamProjectDemandBreakdown(teamId,y,skillFilter){
+/* Per-project, per-month charge a team's projects represent, for a given
+   year. With netCoverage, named/individual allocations of a matching-skill
+   team member are subtracted first (they already reduce that person's own
+   remaining capacity), leaving only the unassigned share of the demand —
+   this is what actually reduces the Capacity plan's "−x proj" figure.
+   Without netCoverage, every project's raw planned charge is returned
+   as-is, regardless of who's already named onto it — this is the view a
+   PM wants for arbitraging how a team's time is split across its
+   projects. */
+function teamProjectCharge(teamId,y,netCoverage){
   const out = [];
   for(const pr of projects){
     if(pr.active===false) continue;
@@ -731,12 +732,12 @@ function teamProjectDemandBreakdown(teamId,y,skillFilter){
     if(!months.length) continue;
     for(const w of (pr.workloads||[])){
       const skill = (w.skill||"").trim();
-      if(skillFilter && skillFilter!=="all" && skill!==skillFilter) continue;
       if(!matchingTargets.some(t=>!t.skill || t.skill===skill)) continue;
       const series = workloadMonthlySeries(w, months);
       const monthly = Array(12).fill(0);
       months.forEach((mo,i)=>{
         if(mo.y!==y || !(series[i]>0)) return;
+        if(!netCoverage){ monthly[mo.m] = series[i]; return; }
         const coverage = activePeople().filter(p=>p.teamId===teamId && (p.skill||"").trim()===skill)
           .reduce((s,p)=>s+(personMonthAllocPct(p,y,mo.m)/100)*personMonthOpen(p,y,mo.m), 0);
         monthly[mo.m] = Math.max(0, series[i]-coverage);
@@ -1483,7 +1484,7 @@ function viewCapacity(){
   const mkRow = (label, sub, vals, pends, smooths, demands, opts)=>{
     opts = opts||{};
     const sum = vals.reduce((s,v)=>s+v,0);
-    const toggle = opts.toggleId ? `<button class="teamtoggle" data-capexpand="${opts.toggleId}" title="${expandedCapaTeams.has(opts.toggleId)?"Collapse":"Expand — see per-person detail and projects impacting capacity"}">${expandedCapaTeams.has(opts.toggleId)?"▼":"▶"}</button> ` : "";
+    const toggle = opts.toggleId ? `<button class="teamtoggle" data-capexpand="${opts.toggleId}" title="${expandedCapaTeams.has(opts.toggleId)?"Collapse":"Expand — see the projects assigned to this team, with days per project"}">${expandedCapaTeams.has(opts.toggleId)?"▼":"▶"}</button> ` : "";
     return `<tr${opts.strong?' class="caprow"':''}><td class="person"${opts.indent?' style="padding-left:24px"':""}>${toggle}${esc(label)}${sub?`<br><span class="sub">${esc(sub)}</span>`:""}</td>
       ${vals.map((v,m)=>cell(v,pends?pends[m]:0,smooths?smooths[m]:0,demands?demands[m]:0,m===curM)).join("")}
       <td><b>${fmtDays(sum)}</b></td></tr>`;
@@ -1503,9 +1504,9 @@ function viewCapacity(){
   for(const t of visibleTeams){
     const members = activePeople().filter(p=>p.teamId===t.id);
     if(!members.length) continue;
-    const breakdown = teamProjectDemandBreakdown(t.id, y, "all");
+    const netted = teamProjectCharge(t.id, y, true);
     const demands = Array(12).fill(0);
-    breakdown.forEach(b=>b.monthly.forEach((v,m)=>demands[m]+=v));
+    netted.forEach(b=>b.monthly.forEach((v,m)=>demands[m]+=v));
     const vals = sumMonths(members, remainFn).map((v,m)=>v-demands[m]);
     const pends = sumMonths(members, (p,yy,m)=>personMonthAbsent(p,yy,m,"pending"));
     const smooths = sumMonths(members, (p,yy,m)=>personMonthSmoothLeave(p,yy,m));
@@ -1515,32 +1516,13 @@ function viewCapacity(){
     rows.push(mkRow(t.name, members.length+" pers.", vals, pends, capSmooth?smooths:null, demands, {toggleId:t.id}));
 
     if(expandedCapaTeams.has(t.id)){
-      const skillFilter = capSkillFilter[t.id]||"all";
-      const teamSk = teamSkills(t.id);
-      if(teamSk.length){
-        rows.push(`<tr><td colspan="14" style="padding-left:24px"><span class="muted">Filter people/skill:</span>
-          <select data-capaskill="${t.id}" style="max-width:200px; display:inline-block; width:auto; margin-left:6px">
-            <option value="all" ${skillFilter==="all"?"selected":""}>All skills</option>
-            ${teamSk.map(s=>`<option value="${esc(s)}" ${skillFilter===s?"selected":""}>${esc(s)}</option>`).join("")}
-          </select></td></tr>`);
-      }
-      let subMembers = members;
-      if(skillFilter!=="all") subMembers = subMembers.filter(p=>(p.skill||"").trim()===skillFilter);
-      subMembers = sortPeople(subMembers);
-      for(const p of subMembers){
-        const pvals = [...Array(12)].map((_,m)=>personMonthRemaining(p,y,m,capSmooth));
-        const ppends = [...Array(12)].map((_,m)=>personMonthAbsent(p,y,m,"pending"));
-        const psmooths = [...Array(12)].map((_,m)=>personMonthSmoothLeave(p,y,m));
-        rows.push(mkRow(personLabel(p),
-          `${locById(p.locationId)?.name||""} · ${CONTRACTS[p.contract||"interne"].label}${p.skill?` · ${p.skill}`:""}`,
-          pvals, ppends, capSmooth?psmooths:null, null, {indent:true}));
-      }
-      const shownBreakdown = skillFilter==="all" ? breakdown : breakdown.filter(b=>b.skill===skillFilter);
-      rows.push(`<tr><td colspan="14" style="padding-left:24px; padding-top:10px"><b>Projects impacting capacity</b></td></tr>`);
-      if(shownBreakdown.length){
-        for(const b of shownBreakdown) rows.push(demandRow(b.projectName, b.skill||"(no skill)", b.monthly));
+      const charge = teamProjectCharge(t.id, y, false);
+      rows.push(`<tr><td colspan="14" style="padding-left:24px"><b>Projects assigned to this team</b>
+        <span class="muted">— total planned days per project, for rebalancing across projects</span></td></tr>`);
+      if(charge.length){
+        for(const b of charge) rows.push(demandRow(b.projectName, b.skill||"(no skill)", b.monthly));
       }else{
-        rows.push(`<tr><td colspan="14" style="padding-left:24px"><span class="muted">No project workload currently impacts this team's capacity.</span></td></tr>`);
+        rows.push(`<tr><td colspan="14" style="padding-left:24px"><span class="muted">No project currently targets this team.</span></td></tr>`);
       }
     }
   }
@@ -1582,8 +1564,8 @@ function viewCapacity(){
     Remote work isn't deducted. A negative value (red) signals overcapacity. The "−x proj" note is project
     workload (Projects tab) assigned to this team that isn't already covered by a named/individual allocation of
     a matching-skill member — it's netted against named allocations first, then the leftover reduces this pool
-    directly. Click ▶ on a team to see its per-person detail and exactly which projects are behind that
-    deduction.</p>
+    directly. Click ▶ on a team to see the full, un-netted breakdown of days per project assigned to it — useful
+    to arbitrate how the team's time is split across its projects.</p>
   </div>`;
 }
 
@@ -2158,10 +2140,6 @@ function bindAfterRender(){
   document.querySelectorAll("[data-capexpand]").forEach(b=>b.onclick=()=>{
     const id = b.dataset.capexpand;
     if(expandedCapaTeams.has(id)) expandedCapaTeams.delete(id); else expandedCapaTeams.add(id);
-    render();
-  });
-  document.querySelectorAll("[data-capaskill]").forEach(sel=>sel.onchange=e=>{
-    capSkillFilter[sel.dataset.capaskill] = e.target.value;
     render();
   });
 

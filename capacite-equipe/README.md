@@ -146,12 +146,12 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
 - **Filtre par équipe** : des cases à cocher « Teams: » permettent de
   n'afficher qu'une ou plusieurs équipes (histogramme et tableau se
   limitent alors aux équipes cochées) ; toutes cochées par défaut.
-- **▶ pour déplier une équipe** : révèle le détail par personne (avec un
-  filtre par **compétence** local à cette équipe), puis un bloc
-  « Projects impacting capacity » qui liste, projet par projet, la charge
-  qui contribue à l'annotation « −x proj » de cette équipe (mois par mois)
-  — de quoi voir immédiatement *quels* projets pèsent sur la capacité, pas
-  seulement de combien. Se replie avec ▼.
+- **▶ pour déplier une équipe** : révèle « Projects assigned to this team »
+  — la liste des projets qui ciblent cette équipe, avec le **nombre de
+  jours planifiés par projet, mois par mois** (charge brute, non déduite
+  des affectations nommées — contrairement à l'annotation « −x proj » de la
+  ligne équipe). C'est la vue pensée pour arbitrer la répartition du temps
+  de l'équipe entre ses différents projets. Se replie avec ▼.
 - Capacité restante = jours ouvrés du mois selon le lieu de chacun −
   absences **validées** − affectations projets (% du mois). Les congés
   **en attente** apparaissent en orange (« −x ? ») mais n'impactent la
@@ -172,9 +172,9 @@ Product Owner (Jerome). Modifiables ensuite dans Paramètres → Personnes.
 - **Charge projet non couverte** (annotation turquoise « −x proj ») : quand
   un projet cible une équipe/compétence, la part de sa charge que les
   affectations nommées ne couvrent pas encore réduit directement la
-  capacité restante de cette équipe — voir « Projects impacting capacity »
-  ci-dessus pour le détail par projet, et « Projets & affectations »
-  ci-dessous pour le détail du calcul.
+  capacité restante de cette équipe — voir « Projets & affectations »
+  ci-dessous pour le détail du calcul (le détail par projet, lui, est dans
+  « Projects assigned to this team » ci-dessus, en charge brute).
 
 ### Projets & affectations (profil Chef de projet)
 
