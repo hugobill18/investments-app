@@ -200,9 +200,13 @@ app.post('/api/login', async (req, res) => {
     // Appareil de confiance ?
     const trustedUserId = getTrustedUserIdFromCookie(req);
     if (trustedUserId && trustedUserId === user.id) {
-      req.session.userId = user.id;
-      req.session.email = user.email;
-      return res.json({ ok: true, step: 'authenticated', trusted: true });
+      // Régénère la session à l'authentification (anti fixation de session)
+      return req.session.regenerate((err) => {
+        if (err) return res.status(500).json({ error: 'Erreur serveur.' });
+        req.session.userId = user.id;
+        req.session.email = user.email;
+        res.json({ ok: true, step: 'authenticated', trusted: true });
+      });
     }
 
     // Sinon : envoyer un code
@@ -259,29 +263,31 @@ app.post('/api/verify-code', (req, res) => {
 
     if (!row) return res.status(401).json({ error: 'Code invalide ou expiré.' });
 
-    // Marque le code comme utilisé et ouvre la session
+    // Marque le code comme utilisé et ouvre la session.
+    // La session est régénérée à l'authentification (anti fixation).
     db.prepare('UPDATE login_codes SET used_at = datetime(\'now\') WHERE id = ?').run(row.id);
     const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(userId);
-    req.session.userId = user.id;
-    req.session.email = user.email;
-    delete req.session.pendingUserId;
-    delete req.session.pendingPurpose;
-    delete req.session.verifyAttempts;
+    req.session.regenerate((err) => {
+      if (err) return res.status(500).json({ error: 'Erreur serveur.' });
+      req.session.userId = user.id;
+      req.session.email = user.email;
 
-    // Option : enregistrer une clef d'accès pour cet appareil
-    if (trustDevice) {
-      const key = generateAccessKey();
-      db.prepare(`INSERT INTO trusted_devices (user_id, key_hash, user_agent)
-                  VALUES (?, ?, ?)`)
-        .run(user.id, hashToken(key), req.headers['user-agent'] || '');
-      res.cookie('device_key', key, {
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 1000 * 60 * 60 * 24 * 180 // 180 jours
-      });
-    }
+      // Option : enregistrer une clef d'accès pour cet appareil
+      if (trustDevice) {
+        const key = generateAccessKey();
+        db.prepare(`INSERT INTO trusted_devices (user_id, key_hash, user_agent)
+                    VALUES (?, ?, ?)`)
+          .run(user.id, hashToken(key), String(req.headers['user-agent'] || '').slice(0, 300));
+        res.cookie('device_key', key, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: IS_PROD,
+          maxAge: 1000 * 60 * 60 * 24 * 180 // 180 jours
+        });
+      }
 
-    res.json({ ok: true, email: user.email, trusted: trustDevice });
+      res.json({ ok: true, email: user.email, trusted: trustDevice });
+    });
   } catch (err) {
     console.error('verify-code error:', err);
     res.status(500).json({ error: 'Erreur serveur.' });
